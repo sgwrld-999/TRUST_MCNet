@@ -1,0 +1,78 @@
+# TRUST MCNet Configuration File
+
+# Model Configuration
+model:
+  type: "MLP"  # Options: "MLP", "LSTM"
+  mlp:
+    input_dim: 10
+    hidden_dims: [64, 32, 16]
+    output_dim: 2
+  lstm:
+    input_dim: 10
+    hidden_dim: 64
+    num_layers: 2
+    output_dim: 2
+
+# Client Configuration
+client:
+  learning_rate: 0.001
+  batch_size: 32
+  local_epochs: 5
+  optimizer: "Adam"  # Options: "Adam", "SGD", "RMSprop"
+
+# Federated Learning Configuration
+federated:
+  num_clients: 5
+  num_rounds: 100
+  fraction_fit: 0.8  # Fraction of clients to train each round
+  fraction_evaluate: 0.2  # Fraction of clients to evaluate each round
+  min_fit_clients: 3
+  min_evaluate_clients: 2
+  min_available_clients: 3
+
+# Trust Mechanism Configuration
+trust:
+  enabled: true
+  trust_threshold: 0.7
+  trust_decay_factor: 0.95
+  reputation_weight: 0.3
+
+# Data Configuration
+data:
+  target_column: "label"
+  feature_columns: []  # Empty list means all columns except target
+  test_size: 0.2
+  validation_size: 0.1
+  random_state: 42
+  normalize: true
+  handle_missing: "mean"  # Options: "mean", "median", "drop"
+
+# Training Configuration
+training:
+  device: "auto"  # Options: "auto", "cpu", "cuda"
+  seed: 42
+  early_stopping: true
+  patience: 10
+  save_checkpoints: true
+  checkpoint_dir: "checkpoints"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR"
+  log_file: "training.log"
+  log_metrics: true
+  log_frequency: 10  # Log every N rounds
+
+# Evaluation Metrics
+metrics:
+  - "accuracy"
+  - "precision"
+  - "recall"
+  - "f1_score"
+  - "auc"
+
+# Anomaly Detection Specific
+anomaly_detection:
+  threshold: 0.5
+  contamination: 0.1  # Expected fraction of anomalies
+  method: "classification"  # Options: "classification", "reconstruction"
