@@ -22,13 +22,32 @@ client:
 
 # Federated Learning Configuration
 federated:
-  num_clients: 5
+  num_clients: 10
   num_rounds: 100
   fraction_fit: 0.8  # Fraction of clients to train each round
   fraction_evaluate: 0.2  # Fraction of clients to evaluate each round
-  min_fit_clients: 3
+  min_fit_clients: 5
   min_evaluate_clients: 2
-  min_available_clients: 3
+  min_available_clients: 5
+  
+  # Flwr-specific configuration
+  strategy: "FedAdam"
+  strategy_config:
+    eta: 0.001  # Server-side learning rate for FedAdam
+    eta_l: 0.001  # Client-side learning rate
+    beta_1: 0.9  # Momentum parameter
+    beta_2: 0.999  # Second moment parameter
+    tau: 0.001  # Control variates parameter
+    
+  # IoT device considerations
+  iot_config:
+    max_memory_mb: 512  # Maximum memory usage per client
+    max_cpu_percent: 70  # Maximum CPU usage per client
+    connection_timeout: 30  # Connection timeout in seconds
+    resource_monitoring: true
+    adaptive_batch_size: true
+    min_batch_size: 8
+    max_batch_size: 64
 
 # Trust Mechanism Configuration
 trust:
@@ -46,6 +65,11 @@ data:
   random_state: 42
   normalize: true
   handle_missing: "mean"  # Options: "mean", "median", "drop"
+  
+  # Simulation-specific parameters
+  dataset_size: 5000  # Total samples for synthetic data
+  anomaly_ratio: 0.1  # Ratio of anomalous samples
+  distribution: "iid"  # Options: "iid", "non_iid"
 
 # Training Configuration
 training:

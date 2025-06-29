@@ -6,14 +6,19 @@
 help:
 	@echo "TRUST MCNet - Federated Learning Framework"
 	@echo "Available commands:"
-	@echo "  install     - Install dependencies"
-	@echo "  install-dev - Install development dependencies"
-	@echo "  clean       - Clean up generated files"
-	@echo "  test        - Run tests"
-	@echo "  lint        - Run linting"
-	@echo "  format      - Format code"
-	@echo "  run         - Run the main application"
-	@echo "  example     - Run basic example"
+	@echo "  install         - Install dependencies"
+	@echo "  install-dev     - Install development dependencies"
+	@echo "  install-flwr    - Install Flwr federated learning framework"
+	@echo "  clean           - Clean up generated files"
+	@echo "  test            - Run tests"
+	@echo "  test-flwr       - Test Flwr installation"
+	@echo "  lint            - Run linting"
+	@echo "  format          - Format code"
+	@echo "  run             - Run the main application"
+	@echo "  run-flwr        - Run Flwr simulation (default params)"
+	@echo "  run-flwr-custom - Run Flwr simulation (custom params)"
+	@echo "  run-flwr-noniid - Run Flwr simulation (non-IID data)"
+	@echo "  example         - Run basic example"
 
 # Install dependencies
 install:
@@ -22,6 +27,11 @@ install:
 # Install development dependencies
 install-dev: install
 	pip install pytest black flake8 mypy
+
+# Install Flwr federated learning dependencies
+install-flwr:
+	chmod +x setup_flwr.sh
+	./setup_flwr.sh
 
 # Clean up generated files
 clean:
@@ -69,3 +79,21 @@ upload-test:
 
 upload:
 	twine upload dist/*
+
+# Run Flwr simulation with default parameters
+run-flwr:
+	cd TRUST_MCNet_Codebase && python scripts/flwr_simulation.py --config config/config.yaml
+
+# Run Flwr simulation with custom parameters
+run-flwr-custom:
+	cd TRUST_MCNet_Codebase && python scripts/flwr_simulation.py --config config/config.yaml --clients 10 --rounds 50
+
+# Run IoT simulation with non-IID data
+run-flwr-noniid:
+	cd TRUST_MCNet_Codebase && python scripts/flwr_simulation.py --config config/config.yaml --data-distribution non_iid
+
+# Test Flwr installation
+test-flwr:
+	python3 -c "import flwr; print(f'Flwr version: {flwr.__version__}')"
+	python3 -c "import torch; print(f'PyTorch version: {torch.__version__}')"
+	python3 -c "import psutil; print(f'psutil version: {psutil.__version__}')"

@@ -14,3 +14,15 @@ plotly>=5.0.0
 jupyter>=1.0.0
 ipython>=7.0.0
 pathlib2>=2.3.0
+
+# Federated Learning Framework
+flwr>=1.6.0
+flwr-datasets>=0.0.2
+
+# IoT and Resource-constrained devices support
+psutil>=5.9.0
+ray[default]>=2.8.0
+
+# Additional dependencies for federated optimization
+tensorboard>=2.10.0
+protobuf>=3.19.0
