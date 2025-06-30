@@ -1,0 +1,12 @@
+2025-06-27 10:30:34,179 - __main__ - INFO - Starting TRUST MCNet federated learning experiment
+2025-06-27 10:30:34,179 - __main__ - INFO - Configuration loaded from: TRUST_MCNet_Codebase/config/config.yaml
+2025-06-27 10:30:34,181 - __main__ - INFO - Created model: MLP
+2025-06-27 10:30:34,181 - __main__ - INFO - Federated learning experiment completed
+2025-06-27 10:30:37,981 - __main__ - INFO - Starting TRUST MCNet federated learning experiment
+2025-06-27 10:30:37,981 - __main__ - INFO - Configuration loaded from: TRUST_MCNet_Codebase/config/config.yaml
+2025-06-27 10:30:37,981 - __main__ - INFO - Created model: MLP
+2025-06-27 10:30:37,981 - __main__ - INFO - Federated learning experiment completed
+2025-06-27 10:30:39,773 - __main__ - INFO - Starting TRUST MCNet federated learning experiment
+2025-06-27 10:30:39,773 - __main__ - INFO - Configuration loaded from: TRUST_MCNet_Codebase/config/config.yaml
+2025-06-27 10:30:39,774 - __main__ - INFO - Created model: MLP
+2025-06-27 10:30:39,774 - __main__ - INFO - Federated learning experiment completed
