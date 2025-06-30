@@ -4,12 +4,12 @@
 model:
   type: "MLP"  # Options: "MLP", "LSTM"
   mlp:
-    input_dim: 10
-    hidden_dims: [64, 32, 16]
-    output_dim: 2
+    input_dim: 784  # 28*28 for MNIST images
+    hidden_dims: [256, 128, 64]
+    output_dim: 2  # Binary classification (normal vs anomaly)
   lstm:
-    input_dim: 10
-    hidden_dim: 64
+    input_dim: 784
+    hidden_dim: 128
     num_layers: 2
     output_dim: 2
 
@@ -22,8 +22,8 @@ client:
 
 # Federated Learning Configuration
 federated:
-  num_clients: 10
-  num_rounds: 100
+  num_clients: 5
+  num_rounds: 3
   fraction_fit: 0.8  # Fraction of clients to train each round
   fraction_evaluate: 0.2  # Fraction of clients to evaluate each round
   min_fit_clients: 5
@@ -58,6 +58,15 @@ trust:
 
 # Data Configuration
 data:
+  # Dataset selection
+  dataset_type: "mnist"  # Options: "mnist", "synthetic", "csv"
+  data_dir: "data/MNIST"  # Directory for MNIST data
+  download: true  # Auto-download MNIST if not present
+  
+  # MNIST specific configuration
+  anomaly_digits: [1, 7]  # Digits to treat as anomalies for binary classification
+  
+  # General data configuration
   target_column: "label"
   feature_columns: []  # Empty list means all columns except target
   test_size: 0.2
@@ -65,6 +74,7 @@ data:
   random_state: 42
   normalize: true
   handle_missing: "mean"  # Options: "mean", "median", "drop"
+  num_workers: 0  # Data loader workers (0 for IoT devices)
   
   # Simulation-specific parameters
   dataset_size: 5000  # Total samples for synthetic data
@@ -75,6 +85,7 @@ data:
 training:
   device: "auto"  # Options: "auto", "cpu", "cuda"
   seed: 42
+  epochs: 5  # For centralized baseline training
   early_stopping: true
   patience: 10
   save_checkpoints: true
@@ -100,3 +111,28 @@ anomaly_detection:
   threshold: 0.5
   contamination: 0.1  # Expected fraction of anomalies
   method: "classification"  # Options: "classification", "reconstruction"
+
+# Experiment Configuration
+experiment:
+  name: "trust_mcnet_mnist_baseline"
+  description: "MNIST anomaly detection with random weight aggregation"
+  baseline_mode: true  # Use random weights instead of trust scores
+  save_results: true
+  results_dir: "results"
+  
+  # Logging and visualization
+  log_level: "INFO"
+  save_plots: true
+  plot_format: "png"
+  
+  # Metrics to track
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "detection_rate"
+  
+  # Explainability
+  shap_analysis: true
+  shap_samples: 100  # Number of samples for SHAP analysis

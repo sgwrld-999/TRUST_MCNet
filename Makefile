@@ -15,6 +15,9 @@ help:
 	@echo "  lint            - Run linting"
 	@echo "  format          - Format code"
 	@echo "  run             - Run the main application"
+	@echo "  run-baseline    - Run baseline experiment with random weights"
+	@echo "  run-baseline-custom - Run baseline with custom parameters"
+	@echo "  run-mnist-baseline  - Run MNIST verification baseline"
 	@echo "  run-flwr        - Run Flwr simulation (default params)"
 	@echo "  run-flwr-custom - Run Flwr simulation (custom params)"
 	@echo "  run-flwr-noniid - Run Flwr simulation (non-IID data)"
@@ -97,3 +100,15 @@ test-flwr:
 	python3 -c "import flwr; print(f'Flwr version: {flwr.__version__}')"
 	python3 -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 	python3 -c "import psutil; print(f'psutil version: {psutil.__version__}')"
+
+# Run baseline experiment with random weights
+run-baseline:
+	cd TRUST_MCNet_Codebase && python scripts/baseline_experiment.py --config config/config.yaml
+
+# Run baseline with custom parameters
+run-baseline-custom:
+	cd TRUST_MCNet_Codebase && python scripts/baseline_experiment.py --config config/config.yaml --rounds 30 --clients 5
+
+# Run baseline with MNIST verification
+run-mnist-baseline:
+	cd TRUST_MCNet_Codebase && python scripts/baseline_experiment.py --config config/config.yaml --experiment-name mnist_verification
