@@ -8,29 +8,29 @@ TRUST MCNet is an advanced distributed machine learning system that enables mult
 
 ## Key Features
 
-- **🔒 Federated Learning**: Distributed training across multiple IoT clients with privacy preservation
-- **🛡️ Advanced Trust Mechanisms**: Multi-modal trust evaluation (cosine similarity, entropy, reputation)
-- **📱 IoT Optimization**: Resource monitoring, adaptive batch sizing, memory management
-- **🤖 Multi-Model Support**: MLP and LSTM architectures for different data types
-- **⚠️ Anomaly Detection**: Specialized binary classification for detecting anomalous patterns
-- **🌸 Flwr Integration**: Modern federated learning with FedAdam strategy
-- **📊 Comprehensive Metrics**: Detailed evaluation, visualization, and experiment tracking
-- **🔧 Attack Simulation**: Built-in capabilities for testing robustness (label flipping, Gaussian noise)
+- ** Federated Learning**: Distributed training across multiple IoT clients with privacy preservation
+- ** Advanced Trust Mechanisms**: Multi-modal trust evaluation (cosine similarity, entropy, reputation)
+- ** IoT Optimization**: Resource monitoring, adaptive batch sizing, memory management
+- ** Multi-Model Support**: MLP and LSTM architectures for different data types
+- **⚠ Anomaly Detection**: Specialized binary classification for detecting anomalous patterns
+- ** Flwr Integration**: Modern federated learning with FedAdam strategy
+- ** Comprehensive Metrics**: Detailed evaluation, visualization, and experiment tracking
+- ** Attack Simulation**: Built-in capabilities for testing robustness (label flipping, Gaussian noise)
 
 ## Architecture Overview
 
 ### Core Pipeline Components
 
 ```
-📱 IoT Clients (5-50 devices)
+ IoT Clients (5-50 devices)
     ↓ Local Training
-🧠 Trust Evaluator (Cosine + Entropy + Reputation)
+ Trust Evaluator (Cosine + Entropy + Reputation)
     ↓ Trust Scores
-🌸 Flwr Server (FedAdam Strategy)
+ Flwr Server (FedAdam Strategy)
     ↓ Weighted Aggregation
-🔄 Global Model Update
+ Global Model Update
     ↓ Broadcast
-📊 Evaluation & Results
+ Evaluation & Results
 ```
 
 ### Data Pipeline
@@ -658,55 +658,6 @@ make clean            # Remove generated files
 - **Edge Computing**: Local processing optimization
 - **Battery Life**: Energy-efficient federated learning
 
-## Citation
-
-If you use TRUST MCNet in your research, please cite:
-
-```bibtex
-@misc{trust_mcnet_2025,
-  title={TRUST MCNet: Federated Learning with Trust Mechanisms for IoT Anomaly Detection},
-  author={[Author Names]},
-  year={2025},
-  howpublished={\url{https://github.com/[username]/TRUST_MCNet}}
-}
-```
-
-## Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork the repository**
-```bash
-git fork https://github.com/[username]/TRUST_MCNet
-```
-
-2. **Create a feature branch**
-```bash
-git checkout -b feature/new-feature
-```
-
-3. **Make your changes**
-- Follow the existing code style
-- Add unit tests for new features
-- Update documentation as needed
-
-4. **Test your changes**
-```bash
-make test
-make lint
-```
-
-5. **Submit a Pull Request**
-- Provide clear description of changes
-- Include test results
-- Reference any related issues
-
-### Development Guidelines
-- **Code Style**: Follow PEP 8 standards
-- **Documentation**: Update README and docstrings
-- **Testing**: Add tests for new functionality
-- **Logging**: Use appropriate logging levels
-- **Configuration**: Make features configurable
 
 ## License
 
