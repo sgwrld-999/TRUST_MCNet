@@ -1,0 +1,4 @@
+- simulation.use_legacy=true
+- dataset.num_clients=2
+- dataset.max_samples_per_client=50000
+- federated.num_rounds=1

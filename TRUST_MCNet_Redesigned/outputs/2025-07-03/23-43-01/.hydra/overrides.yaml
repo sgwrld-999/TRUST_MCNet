@@ -1,0 +1,2 @@
+- dataset.num_clients=2
+- federated.num_rounds=1

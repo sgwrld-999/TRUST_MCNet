@@ -1,0 +1,25 @@
+# @package _global_
+# Training configuration for TRUST-MCNet
+
+training:
+  epochs: 1
+  learning_rate: 0.001
+  weight_decay: 1e-4
+  optimizer: adam
+  
+  # Optimizer specific parameters
+  momentum: 0.9  # For SGD
+  betas: [0.9, 0.999]  # For Adam
+  
+  # Learning rate scheduling
+  lr_scheduler: null  # Options: step, exponential, cosine, null
+  lr_decay: 0.1
+  lr_patience: 10
+  
+  # Regularization
+  dropout: 0.0
+  
+  # Training control
+  early_stopping: false
+  patience: 5
+  min_delta: 1e-4

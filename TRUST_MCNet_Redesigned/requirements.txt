@@ -1,5 +1,5 @@
 # Core dependencies for TRUST-MCNet redesigned codebase
-# Minimal dependencies following SOLID principles
+# Enhanced with comprehensive dependencies for production use
 
 # Hydra for configuration management
 hydra-core>=1.3.0
@@ -26,10 +26,47 @@ scipy>=1.7.0
 pyyaml>=5.4.0
 pathlib2>=2.3.0
 
-# Optional: For enhanced logging and monitoring
-# tensorboard>=2.10.0
+# TensorBoard for metrics logging
+tensorboard>=2.10.0
 
-# Development and testing (optional)
-# pytest>=6.0.0
-# black>=22.0.0
-# flake8>=4.0.0
+# System monitoring
+psutil>=5.8.0
+
+# Testing framework
+pytest>=6.0.0
+pytest-cov>=3.0.0
+
+# Code quality and formatting
+black>=22.0.0
+flake8>=4.0.0
+isort>=5.10.0
+
+# Type checking
+mypy>=0.950
+
+# Documentation
+sphinx>=4.0.0
+sphinx-rtd-theme>=1.0.0
+
+# Optional: MLflow for experiment tracking (uncomment if needed)
+# mlflow>=1.20.0
+
+# Optional: Weights & Biases for experiment tracking (uncomment if needed)
+# wandb>=0.12.0
+
+# Development utilities
+pre-commit>=2.15.0
+jupyter>=1.0.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Configuration validation
+pydantic>=1.8.0
+
+# Retry mechanisms
+tenacity>=8.0.0
+
+# Progress bars
+tqdm>=4.62.0

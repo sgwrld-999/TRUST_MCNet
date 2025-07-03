@@ -1,0 +1,30 @@
+# @package _global_
+# Extended training configuration for multi-epoch federated learning
+
+training:
+  epochs: 5  # Multiple local epochs
+  learning_rate: 0.01
+  weight_decay: 1e-4
+  optimizer: sgd
+  
+  # SGD specific parameters
+  momentum: 0.9
+  nesterov: true
+  
+  # Learning rate scheduling
+  lr_scheduler: step
+  lr_decay: 0.5
+  lr_step_size: 10
+  lr_patience: 5
+  
+  # Regularization
+  dropout: 0.2
+  
+  # Training control
+  early_stopping: true
+  patience: 10
+  min_delta: 1e-3
+  
+  # Memory management
+  gradient_clipping: 1.0
+  accumulate_grad_batches: 1

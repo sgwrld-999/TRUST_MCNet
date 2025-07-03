@@ -5,12 +5,19 @@ This module serves as the Hydra entry point for the federated learning simulatio
 It loads configuration, validates settings, and orchestrates the training process
 using Ray and Flower frameworks with trust mechanisms.
 
+Features:
+- Enhanced simulation with new architecture patterns (default)
+- Legacy simulation for backward compatibility
+- Hydra configuration management with OmegaConf schemas
+- Comprehensive error handling and logging
+
 Usage:
-    python train.py                    # Use default configuration
-    python train.py dataset=custom_csv # Override dataset
-    python train.py env=gpu            # Use GPU environment
-    python train.py strategy=fedadam   # Use FedAdam strategy
-    python train.py trust=cosine       # Use cosine similarity trust
+    python train.py                              # Use enhanced simulation (default)
+    python train.py simulation.use_legacy=true   # Use legacy simulation
+    python train.py dataset=custom_csv           # Override dataset
+    python train.py env=gpu                      # Use GPU environment
+    python train.py strategy=fedadam             # Use FedAdam strategy
+    python train.py trust=cosine                 # Use cosine similarity trust
     
 Hydra allows easy configuration overrides and experiment management.
 """
@@ -26,7 +33,9 @@ from omegaconf import DictConfig, OmegaConf
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 
+# Import both simulation modules
 from simulation import run_simulation, setup_logging, validate_configuration
+from enhanced_simulation import run_enhanced_simulation
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +46,15 @@ def main(cfg: DictConfig) -> Dict[str, Any]:
     Main function for TRUST-MCNet federated learning training.
     
     This function serves as the Hydra entry point and orchestrates the entire
-    federated learning process:
+    federated learning process using either the enhanced simulation (default)
+    or legacy simulation for backward compatibility.
     
+    Process:
     1. Setup logging and configuration validation
-    2. Convert Hydra DictConfig to regular dict for compatibility
-    3. Initialize and run the federated learning simulation
-    4. Handle results and cleanup
+    2. Convert Hydra DictConfig for compatibility
+    3. Choose simulation type based on configuration
+    4. Initialize and run the federated learning simulation
+    5. Handle results and cleanup
     
     Args:
         cfg: Hydra DictConfig containing all configuration parameters
@@ -72,9 +84,15 @@ def main(cfg: DictConfig) -> Dict[str, Any]:
         logger.info("Validating configuration...")
         validate_configuration(config_dict)
         
-        # Run the federated learning simulation
-        logger.info("Starting federated learning simulation...")
-        results = run_simulation(config_dict)
+        # Determine which simulation to use
+        use_legacy = config_dict.get('simulation', {}).get('use_legacy', False)
+        
+        if use_legacy:
+            logger.info("Using legacy simulation for backward compatibility...")
+            results = run_simulation(config_dict)
+        else:
+            logger.info("Using enhanced simulation with new architecture patterns...")
+            results = run_enhanced_simulation(cfg)  # Pass original DictConfig for enhanced simulation
         
         # Log final results
         _log_simulation_results(results)

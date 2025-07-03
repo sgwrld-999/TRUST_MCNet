@@ -2,17 +2,20 @@
 Ray-based Flower client for TRUST-MCNet federated learning.
 
 This module implements a Ray Actor that wraps the Flower NumPyClient interface,
-enabling distributed client execution with resource management and trust mechanisms.
+enabling distributed client execution with resource management, trust mechanisms,
+and improved training logic.
 """
 
 import logging
 import time
 import traceback
+import gc
 from typing import Dict, List, Tuple, Any, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR, ExponentialLR, CosineAnnealingLR
 import ray
 import flwr as fl
 from flwr.common import (
@@ -32,6 +35,7 @@ from torch.utils.data import DataLoader, Subset
 from models.model import MLP, LSTM
 from utils.data_utils import create_data_loaders, split_train_eval
 from trust_module.trust_evaluator import TrustEvaluator
+from utils.ray_utils import cleanup_training_resources, cleanup_evaluation_resources, MemoryTracker
 
 logger = logging.getLogger(__name__)
 

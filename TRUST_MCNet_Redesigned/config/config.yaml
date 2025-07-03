@@ -8,6 +8,8 @@ defaults:
   - strategy: fedavg
   - trust: hybrid
   - model: mlp
+  - training: default
+  - ray: local
   - _self_
 
 # Hydra configuration for experiment management
@@ -20,13 +22,6 @@ hydra:
   job:
     chdir: false
 
-# Training configuration
-training:
-  epochs: 1
-  learning_rate: 0.001
-  weight_decay: 1e-4
-  optimizer: adam
-
 # Federated learning configuration
 federated:
   num_rounds: 3
@@ -36,7 +31,23 @@ federated:
   min_evaluate_clients: 2
   min_available_clients: 2
 
+# Simulation configuration
+simulation:
+  use_legacy: false  # Use enhanced simulation by default (true for legacy)
+  use_enhanced_client: true
+  enable_trust_evaluation: true
+  trust_threshold: 0.5
+  enable_metrics_aggregation: true
+
 # Logging configuration
 logging:
   level: INFO
   format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  log_to_file: false
+  log_file: null
+  
+  # Metrics logging
+  metrics:
+    enable_tensorboard: false
+    tensorboard_dir: "logs/tensorboard"
+    log_frequency: 1  # Log every N rounds

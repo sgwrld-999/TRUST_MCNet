@@ -1,0 +1,24 @@
+# @package _global_
+# Ray configuration for distributed/cluster deployment
+
+env:
+  device: auto
+  
+  ray:
+    num_cpus: 16
+    num_gpus: 4
+    object_store_memory: 8000000000  # 8GB
+    dashboard_host: "0.0.0.0"
+    dashboard_port: 8265
+    ignore_reinit_error: true
+    
+  simulation:
+    client_resources:
+      num_cpus: 2
+      num_gpus: 0.25
+      
+  # DataLoader optimization for distributed
+  dataloader:
+    num_workers: 4
+    pin_memory: true
+    prefetch_factor: 4

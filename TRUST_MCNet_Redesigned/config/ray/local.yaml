@@ -1,0 +1,24 @@
+# @package _global_
+# Ray configuration for local development
+
+env:
+  device: auto
+  
+  ray:
+    num_cpus: 4
+    num_gpus: 0
+    object_store_memory: 1000000000  # 1GB
+    dashboard_host: "127.0.0.1"
+    dashboard_port: 8265
+    ignore_reinit_error: true
+    
+  simulation:
+    client_resources:
+      num_cpus: 1
+      num_gpus: 0
+      
+  # DataLoader optimization
+  dataloader:
+    num_workers: 0  # For Ray actors
+    pin_memory: false
+    prefetch_factor: 2
