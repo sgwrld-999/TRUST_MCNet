@@ -1,0 +1,27 @@
+# @package _global_
+# Reputation-based trust evaluation configuration
+
+trust:
+  name: reputation
+  mode: reputation
+  threshold: 0.6
+  
+  # Reputation parameters
+  parameters:
+    reputation:
+      decay_rate: 0.9
+      min_history: 5
+      performance_weight: 0.8
+      consistency_weight: 0.2
+      initial_reputation: 0.5
+      
+  # Trust update settings
+  update:
+    frequency: 1  # Update every round
+    smoothing_factor: 0.15
+    
+  # Trust-based client selection
+  selection:
+    enabled: true
+    min_trust_score: 0.4
+    max_malicious_ratio: 0.1

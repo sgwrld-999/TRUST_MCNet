@@ -1,0 +1,35 @@
+# @package _global_
+# FedAdam strategy configuration
+
+strategy:
+  name: fedadam
+  class_name: FedAdam
+  
+  # Basic FedAdam parameters
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  
+  # FedAdam specific parameters
+  eta: 0.01        # Server-side learning rate
+  eta_l: 0.01      # Client-side learning rate
+  beta_1: 0.9      # First moment decay rate
+  beta_2: 0.999    # Second moment decay rate
+  tau: 0.001       # Control variates parameter
+  
+  # Client sampling settings
+  evaluate_metrics_aggregation_fn: null
+  fit_metrics_aggregation_fn: null
+  
+  # Server-side evaluation
+  evaluate_fn: null
+  on_fit_config_fn: null
+  on_evaluate_config_fn: null
+  
+  # Accept/reject criteria
+  accept_failures: true
+  
+  # Additional parameters
+  initial_parameters: null

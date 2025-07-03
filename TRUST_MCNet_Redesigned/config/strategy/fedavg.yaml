@@ -1,0 +1,28 @@
+# @package _global_
+# FedAvg strategy configuration
+
+strategy:
+  name: fedavg
+  class_name: FedAvg
+  
+  # Basic FedAvg parameters
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  
+  # Client sampling settings
+  evaluate_metrics_aggregation_fn: null
+  fit_metrics_aggregation_fn: null
+  
+  # Server-side evaluation
+  evaluate_fn: null
+  on_fit_config_fn: null
+  on_evaluate_config_fn: null
+  
+  # Accept/reject criteria
+  accept_failures: true
+  
+  # Additional parameters
+  initial_parameters: null

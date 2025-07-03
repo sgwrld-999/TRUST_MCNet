@@ -1,0 +1,32 @@
+# @package _global_
+# Synthetic IoT dataset configuration for federated learning
+
+dataset:
+  name: synthetic_iot
+  path: "./data/synthetic_iot.csv"
+  num_clients: 10
+  eval_fraction: 0.2
+  batch_size: 32
+  val_ratio: 0.1
+  
+  # Synthetic data generation parameters
+  synthetic:
+    num_samples: 5000
+    input_dim: 20
+    anomaly_ratio: 0.1
+    noise_level: 0.1
+    seed: 42
+  
+  # Data preprocessing
+  preprocessing:
+    standardize: true
+    impute_missing: true
+    impute_strategy: mean
+  
+  # Federated distribution settings
+  partitioning: dirichlet
+  dirichlet_alpha: 0.3
+  
+  # Data validation
+  min_samples_per_client: 50
+  max_samples_per_client: 1000

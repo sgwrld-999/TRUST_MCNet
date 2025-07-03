@@ -1,0 +1,27 @@
+# @package _global_
+# MLP model configuration
+
+model:
+  name: mlp
+  type: MLP
+  
+  # MLP architecture parameters
+  mlp:
+    input_dim: 784  # 28*28 for MNIST
+    hidden_dims: [256, 128, 64]
+    output_dim: 2  # Binary classification
+    activation: relu
+    dropout: 0.1
+    batch_norm: false
+    
+  # Training parameters
+  training:
+    loss_function: cross_entropy
+    optimizer: adam
+    learning_rate: 0.001
+    weight_decay: 1e-4
+    
+  # Initialization
+  initialization:
+    method: xavier_uniform
+    gain: 1.0

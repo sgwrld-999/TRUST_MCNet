@@ -1,0 +1,26 @@
+# @package _global_
+# Entropy-based trust evaluation configuration
+
+trust:
+  name: entropy
+  mode: entropy
+  threshold: 0.5
+  
+  # Entropy parameters
+  parameters:
+    entropy:
+      min_entropy: 0.0
+      max_entropy: 10.0
+      normalize: true
+      log_base: 2
+      
+  # Trust update settings
+  update:
+    frequency: 1  # Update every round
+    smoothing_factor: 0.1
+    
+  # Trust-based client selection
+  selection:
+    enabled: true
+    min_trust_score: 0.3
+    max_malicious_ratio: 0.15

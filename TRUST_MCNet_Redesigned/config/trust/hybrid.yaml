@@ -1,0 +1,44 @@
+# @package _global_
+# Hybrid trust evaluation configuration
+
+trust:
+  name: hybrid
+  mode: hybrid
+  threshold: 0.5
+  
+  # Hybrid trust weights
+  weights:
+    cosine: 0.4
+    entropy: 0.3
+    reputation: 0.3
+    
+  # Trust evaluation parameters
+  parameters:
+    # Cosine similarity parameters
+    cosine:
+      min_similarity: 0.1
+      max_similarity: 1.0
+      
+    # Entropy parameters
+    entropy:
+      min_entropy: 0.0
+      max_entropy: 10.0
+      normalize: true
+      
+    # Reputation parameters
+    reputation:
+      decay_rate: 0.95
+      min_history: 3
+      performance_weight: 0.7
+      consistency_weight: 0.3
+      
+  # Trust update settings
+  update:
+    frequency: 1  # Update every round
+    smoothing_factor: 0.1
+    
+  # Trust-based client selection
+  selection:
+    enabled: true
+    min_trust_score: 0.3
+    max_malicious_ratio: 0.2

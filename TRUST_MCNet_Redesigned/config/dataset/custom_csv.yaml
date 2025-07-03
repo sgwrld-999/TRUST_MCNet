@@ -1,0 +1,33 @@
+# @package _global_
+# Custom CSV dataset configuration for federated learning
+
+dataset:
+  name: custom_csv
+  path: "./data/custom_dataset.csv"
+  num_clients: 8
+  eval_fraction: 0.2
+  batch_size: 64
+  val_ratio: 0.15
+  
+  # CSV specific configuration
+  csv:
+    target_column: "target"
+    feature_columns: null  # null means all columns except target
+    separator: ","
+    header: true
+    index_col: null
+  
+  # Data preprocessing
+  preprocessing:
+    standardize: true
+    impute_missing: true
+    impute_strategy: median
+    encode_categoricals: true
+  
+  # Federated distribution settings
+  partitioning: iid
+  dirichlet_alpha: 0.5
+  
+  # Data validation
+  min_samples_per_client: 20
+  max_samples_per_client: 5000

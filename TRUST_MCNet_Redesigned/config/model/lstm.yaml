@@ -1,0 +1,28 @@
+# @package _global_
+# LSTM model configuration
+
+model:
+  name: lstm
+  type: LSTM
+  
+  # LSTM architecture parameters
+  lstm:
+    input_dim: 784  # Input features
+    hidden_dim: 128
+    num_layers: 2
+    output_dim: 2  # Binary classification
+    dropout: 0.1
+    bidirectional: false
+    batch_first: true
+    
+  # Training parameters
+  training:
+    loss_function: cross_entropy
+    optimizer: adam
+    learning_rate: 0.001
+    weight_decay: 1e-4
+    
+  # Initialization
+  initialization:
+    method: xavier_uniform
+    gain: 1.0

@@ -1,0 +1,30 @@
+# @package _global_
+# MNIST dataset configuration for federated learning
+
+dataset:
+  name: mnist
+  path: "./data/MNIST"
+  num_clients: 5
+  eval_fraction: 0.2
+  batch_size: 32
+  val_ratio: 0.1
+  
+  # Data preprocessing
+  transforms:
+    normalize: true
+    mean: [0.1307]
+    std: [0.3081]
+  
+  # Federated distribution settings
+  partitioning: iid  # Options: iid, dirichlet, pathological
+  dirichlet_alpha: 0.5  # Only used if partitioning is dirichlet
+  
+  # Binary classification setup for anomaly detection
+  binary_classification:
+    enabled: true
+    normal_classes: [0, 1, 2, 3, 4, 5, 6, 8, 9]  # All except 7
+    anomaly_classes: [7]  # Digit 7 as anomaly
+    
+  # Data validation
+  min_samples_per_client: 10
+  max_samples_per_client: 10000
