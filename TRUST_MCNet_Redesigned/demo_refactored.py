@@ -233,12 +233,28 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 
 def get_default_config() -> Dict[str, Any]:
-    """Get default configuration."""
+    """Get default configuration, with environment variable overrides."""
+    # Get configuration from environment variables if available
+    dataset_name = os.environ.get('EXPERIMENT_DATASET', 'mock_dataset')
+    num_clients = int(os.environ.get('EXPERIMENT_CLIENTS', '5'))
+    num_rounds = int(os.environ.get('EXPERIMENT_ROUNDS', '3'))
+    experiment_id = os.environ.get('EXPERIMENT_ID', 'default')
+    
+    # Determine clients per round (max 3 or total clients if less)
+    clients_per_round = min(3, num_clients)
+    
+    logger.info(f"Configuration override from environment:")
+    logger.info(f"  Dataset: {dataset_name}")
+    logger.info(f"  Clients: {num_clients}")
+    logger.info(f"  Rounds: {num_rounds}")
+    logger.info(f"  Experiment ID: {experiment_id}")
+    
     return {
-        'num_clients': 5,
-        'num_rounds': 3,
+        'experiment_id': experiment_id,
+        'num_clients': num_clients,
+        'num_rounds': num_rounds,
         'dataset': {
-            'name': 'mock_dataset',
+            'name': dataset_name,
             'path': './data'
         },
         'model': {
@@ -248,7 +264,7 @@ def get_default_config() -> Dict[str, Any]:
         },
         'strategy': {
             'name': 'fedavg',
-            'clients_per_round': 3
+            'clients_per_round': clients_per_round
         },
         'trust': {
             'type': 'cosine_similarity',
