@@ -203,10 +203,11 @@ def run_enhanced_simulation(cfg: DictConfig) -> Dict[str, Any]:
                 'total_time': total_time,
                 'num_clients': num_clients,
                 'num_rounds': cfg.federated.num_rounds,
+                'dataset_size': dataset_size,
                 'dataset_info': dataset_info,
                 'client_split_sizes': split_sizes,
                 'partitioning_strategy': partitioning_strategy,
-                'strategy_name': cfg.strategy.name,
+                'strategy': cfg.strategy.name,
                 'trust_mode': cfg.trust.mode,
                 'final_metrics': _extract_final_metrics(history),
                 'experiment_name': experiment_name
@@ -278,9 +279,13 @@ def _create_initial_model(model_config: DictConfig, dataset_info: Dict[str, Any]
     output_dim = dataset_info['num_classes']
     
     if model_type.upper() == 'MLP':
+        # Get MLP config
+        mlp_config = model_config.get('mlp', {})
+        hidden_dims = mlp_config.get('hidden_dims', [128, 64])
+        
         model = MLP(
             input_dim=input_dim,
-            hidden_dims=model_config.get('hidden_dims', [128, 64]),
+            hidden_dims=hidden_dims,
             output_dim=output_dim
         )
     elif model_type.upper() == 'LSTM':

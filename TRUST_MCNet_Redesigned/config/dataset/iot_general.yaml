@@ -1,0 +1,175 @@
+# @package _global_
+# General IoT dataset configuration for TRUST-MCNet
+# This configuration is designed to work with any IoT network traffic dataset
+# that follows the standard format with 'Label' column for anomaly detection
+
+dataset:
+  name: iot_general
+  path: "./data/IoT_Datasets"
+  
+  # Dataset selection strategy
+  selection_strategy: "auto_detect"  # auto_detect, specific_file, merged
+  
+  # Specific dataset files (auto-detected if empty)
+  dataset_files: []  # Will auto-detect all CSV files in path
+  
+  # For specific file selection, use one of:
+  # - "CIC_IOMT_2024_100_Samples.csv"     # Medical IoT datasets
+  # - "CIC_IoT_2023_100_Samples.csv"      # General IoT 2023
+  # - "Edge_IIoT_100_Samples.csv"         # Industrial IoT (Edge)
+  # - "IoT_23_100_Samples.csv"            # IoT 2023 dataset
+  # - "MedBIoT_100_Samples.csv"           # Medical IoT with malware
+  
+  # Client configuration
+  num_clients: 5
+  eval_fraction: 0.2
+  batch_size: 32
+  val_ratio: 0.1
+  
+  # Data preprocessing
+  preprocessing:
+    # Feature selection strategy
+    feature_selection: "auto"  # auto, manual, all
+    
+    # Columns to exclude (non-feature columns)
+    exclude_columns:
+      - "timestamp"
+      - "unique_id"
+      - "Label"        # Target column
+      - "Sub_Label"    # Detailed label (optional)
+    
+    # Feature encoding for categorical variables
+    categorical_encoding:
+      - "protocol"
+      - "service"
+      - "conn_state"
+      - "history"
+      - "orig_host"
+      - "resp_host"
+      - "tunnel_parents"
+    
+    # Numerical feature handling
+    numerical_features:
+      - "orig_port"
+      - "resp_port"
+      - "duration"
+      - "orig_bytes"
+      - "resp_bytes"
+      - "missed_bytes"
+      - "orig_pkts"
+      - "orig_ip_bytes"
+      - "resp_pkts"
+      - "resp_ip_bytes"
+    
+    # Boolean features
+    boolean_features:
+      - "local_orig"
+      - "local_resp"
+    
+    # Data cleaning
+    handle_missing_values: true
+    missing_value_strategy: "median"  # median, mean, drop, forward_fill
+    
+    # Normalization/Standardization
+    standardization: true
+    normalization_method: "standard"  # standard, minmax, robust
+    
+    # Feature scaling
+    scale_features: true
+    remove_outliers: false
+    outlier_method: "iqr"  # iqr, zscore
+  
+  # Label configuration for binary anomaly detection
+  label_config:
+    target_column: "Label"
+    
+    # Binary classification mapping
+    # Normal/Benign traffic vs Anomalous/Attack traffic
+    normal_labels:
+      - "BenignTraffic"
+      - "Benign"
+      - "BenignTraffic"
+      - "Mirai_BenignTraffic"
+    
+    anomaly_labels:
+      - "DDoS"
+      - "BruteForce"
+      - "Recon"
+      - "Mirai_DDoS"
+      - "Ransomware"
+      - "Malicious"
+      - "bashlite"
+      - "Mirai"
+      - "web"
+    
+    # Auto-detect strategy: if label not in normal_labels, treat as anomaly
+    auto_anomaly_detection: true
+    
+    # Class balancing
+    balance_classes: true
+    balancing_method: "undersample"  # oversample, undersample, smote
+  
+  # Data partitioning for federated learning
+  partitioning: "iid"  # iid, dirichlet, pathological
+  dirichlet_alpha: 0.5
+  
+  # IoT-specific settings
+  iot_config:
+    # Device simulation
+    simulate_heterogeneous_devices: true
+    device_types:
+      - "smart_sensor"
+      - "smart_camera"
+      - "smart_gateway"
+      - "medical_device"
+      - "industrial_controller"
+    
+    # Network constraints simulation
+    simulate_network_constraints: true
+    bandwidth_limits:
+      low: 100    # KB/s
+      medium: 500
+      high: 1000
+    
+    # Edge computing simulation
+    edge_computing: true
+    compute_constraints:
+      cpu_cores: [1, 2, 4]
+      memory_mb: [512, 1024, 2048]
+      storage_gb: [8, 16, 32]
+  
+  # Data validation
+  validation:
+    min_samples_per_client: 10
+    max_samples_per_client: 50000
+    min_features: 5
+    required_columns:
+      - "Label"
+    
+    # Quality checks
+    check_data_quality: true
+    max_missing_percentage: 0.3
+    min_class_samples: 5
+  
+  # Transforms for network traffic data
+  transforms:
+    # Convert categorical to numerical
+    encode_categorical: true
+    
+    # Log transform for highly skewed numerical features
+    log_transform_features:
+      - "orig_bytes"
+      - "resp_bytes"
+      - "duration"
+    
+    # Feature engineering
+    create_derived_features: true
+    derived_features:
+      - "bytes_ratio"          # orig_bytes / resp_bytes
+      - "packet_size_avg"      # total_bytes / total_packets
+      - "connection_rate"      # packets / duration
+    
+    # Normalization
+    normalize: true
+    mean: [0.0]  # Will be computed automatically
+    std: [1.0]   # Will be computed automatically

@@ -1,0 +1,27 @@
+# @package _global_
+# MLP model configuration for IoT anomaly detection
+
+model:
+  name: iot_mlp
+  type: MLP
+  
+  # MLP architecture parameters
+  mlp:
+    input_dim: 19  # Auto-detected from IoT dataset features
+    hidden_dims: [64, 32, 16]  # Smaller network suitable for IoT data
+    output_dim: 2  # Binary classification (normal vs anomaly)
+    activation: relu
+    dropout: 0.2
+    batch_norm: true
+    
+  # Training parameters
+  training:
+    loss_function: cross_entropy
+    optimizer: adam
+    learning_rate: 0.001
+    weight_decay: 1e-4
+    
+  # Initialization
+  initialization:
+    method: xavier_uniform
+    gain: 1.0

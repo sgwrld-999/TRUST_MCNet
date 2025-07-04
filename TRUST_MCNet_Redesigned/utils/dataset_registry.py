@@ -415,6 +415,11 @@ class DataManager:
         """
         try:
             self.train_dataset, self.test_dataset = self.loader.load(self.config)
+            
+            # Update data shape after loading for loaders that support it
+            if hasattr(self.loader, '_actual_data_shape'):
+                self._actual_data_shape = self.loader._actual_data_shape
+            
             logger.info(f"Successfully loaded {self.config['name']} dataset")
             return self.train_dataset, self.test_dataset
         except Exception as e:
@@ -428,8 +433,210 @@ class DataManager:
         Returns:
             Dictionary with dataset information
         """
+        # Use actual data shape if available
+        if hasattr(self, '_actual_data_shape'):
+            data_shape = self._actual_data_shape
+        else:
+            data_shape = self.loader.get_data_shape(self.config)
+            
         return {
-            'data_shape': self.loader.get_data_shape(self.config),
+            'data_shape': data_shape,
             'num_classes': self.loader.get_num_classes(self.config),
             'dataset_name': self.config['name']
         }
+
+
+class IoTGeneralLoader(DatasetLoader):
+    """General IoT dataset loader for network traffic anomaly detection."""
+    
+    def load(self, config: Dict[str, Any]) -> Tuple[Dataset, Optional[Dataset]]:
+        """Load IoT dataset from CSV files."""
+        from sklearn.preprocessing import StandardScaler, LabelEncoder
+        from sklearn.model_selection import train_test_split
+        import glob
+        import os
+        
+        data_path = config['path']
+        logger.info(f"Loading IoT datasets from: {data_path}")
+        
+        try:
+            # Auto-detect CSV files or use specified files
+            dataset_files = config.get('dataset_files', [])
+            if not dataset_files:
+                csv_pattern = os.path.join(data_path, "*.csv")
+                dataset_files = glob.glob(csv_pattern)
+                logger.info(f"Auto-detected {len(dataset_files)} CSV files")
+            else:
+                dataset_files = [os.path.join(data_path, f) for f in dataset_files]
+            
+            if not dataset_files:
+                raise ValueError(f"No CSV files found in {data_path}")
+            
+            # Load and combine all datasets
+            all_dataframes = []
+            for file_path in dataset_files:
+                logger.info(f"Loading dataset: {os.path.basename(file_path)}")
+                df = pd.read_csv(file_path)
+                all_dataframes.append(df)
+            
+            # Combine all datasets
+            combined_df = pd.concat(all_dataframes, ignore_index=True)
+            logger.info(f"Combined dataset shape: {combined_df.shape}")
+            
+            # Preprocess the data
+            processed_df = self._preprocess_dataframe(combined_df, config)
+            
+            # Split features and labels
+            X, y = self._prepare_features_labels(processed_df, config)
+            
+            # Split into train and test
+            test_size = config.get('eval_fraction', 0.2)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, stratify=y
+            )
+            
+            # Create PyTorch datasets
+            train_dataset = IoTDataset(X_train, y_train)
+            test_dataset = IoTDataset(X_test, y_test)
+            
+            # Store actual data shape for model initialization
+            self._actual_data_shape = (X_train.shape[1],)
+            
+            logger.info(f"Created IoT datasets: {len(train_dataset)} train, {len(test_dataset)} test")
+            return train_dataset, test_dataset
+            
+        except Exception as e:
+            logger.error(f"Failed to load IoT dataset: {e}")
+            raise
+    
+    def _preprocess_dataframe(self, df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
+        """Preprocess the IoT dataframe."""
+        preprocessing_config = config.get('preprocessing', {})
+        
+        # Handle missing values
+        if preprocessing_config.get('handle_missing_values', True):
+            strategy = preprocessing_config.get('missing_value_strategy', 'median')
+            df = self._handle_missing_values(df, strategy)
+        
+        # Remove excluded columns
+        exclude_columns = preprocessing_config.get('exclude_columns', [])
+        available_exclude = [col for col in exclude_columns if col in df.columns]
+        
+        # Keep target column for later processing
+        target_col = config.get('label_config', {}).get('target_column', 'Label')
+        if target_col in available_exclude:
+            available_exclude.remove(target_col)
+        
+        # Drop non-feature columns except target
+        feature_df = df.drop(columns=available_exclude, errors='ignore')
+        
+        return feature_df
+    
+    def _handle_missing_values(self, df: pd.DataFrame, strategy: str) -> pd.DataFrame:
+        """Handle missing values in the dataframe."""
+        if strategy == 'median':
+            # For numerical columns only
+            numeric_columns = df.select_dtypes(include=[np.number]).columns
+            df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].median())
+            # For categorical columns, use mode
+            categorical_columns = df.select_dtypes(include=['object']).columns
+            for col in categorical_columns:
+                if df[col].isnull().any():
+                    df[col] = df[col].fillna(df[col].mode().iloc[0] if not df[col].mode().empty else 'unknown')
+        elif strategy == 'mean':
+            numeric_columns = df.select_dtypes(include=[np.number]).columns
+            df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].mean())
+        elif strategy == 'drop':
+            df = df.dropna()
+        
+        return df
+    
+    def _prepare_features_labels(self, df: pd.DataFrame, config: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray]:
+        """Prepare features and labels from dataframe."""
+        from sklearn.preprocessing import StandardScaler, LabelEncoder
+        
+        label_config = config.get('label_config', {})
+        target_column = label_config.get('target_column', 'Label')
+        
+        if target_column not in df.columns:
+            raise ValueError(f"Target column '{target_column}' not found in dataset")
+        
+        # Separate features and labels
+        y = df[target_column].copy()
+        X = df.drop(columns=[target_column])
+        
+        # Convert labels to binary (normal=0, anomaly=1)
+        normal_labels = label_config.get('normal_labels', ['BenignTraffic'])
+        y_binary = (~y.isin(normal_labels)).astype(int)
+        
+        # Handle categorical features
+        categorical_features = X.select_dtypes(include=['object']).columns
+        for col in categorical_features:
+            le = LabelEncoder()
+            # Handle unknown values
+            X[col] = X[col].fillna('unknown')
+            X[col] = le.fit_transform(X[col].astype(str))
+        
+        # Handle boolean features
+        boolean_columns = X.select_dtypes(include=['bool']).columns
+        X[boolean_columns] = X[boolean_columns].astype(int)
+        
+        # Convert to numpy arrays
+        X_array = X.values.astype(np.float32)
+        y_array = y_binary.values.astype(np.int64)
+        
+        # Standardize features
+        preprocessing_config = config.get('preprocessing', {})
+        if preprocessing_config.get('standardization', True):
+            scaler = StandardScaler()
+            X_array = scaler.fit_transform(X_array)
+        
+        logger.info(f"Feature matrix shape: {X_array.shape}")
+        logger.info(f"Label distribution: Normal={np.sum(y_array == 0)}, Anomaly={np.sum(y_array == 1)}")
+        
+        return X_array, y_array
+    
+    def get_data_shape(self, config: Dict[str, Any]) -> Tuple[int, ...]:
+        """Get IoT data shape (number of features)."""
+        # Try to dynamically determine features based on config
+        # This is a conservative estimate - will be updated after actual loading
+        preprocessing = config.get('preprocessing', {})
+        exclude_columns = preprocessing.get('exclude_columns', [])
+        
+        # Estimate based on typical IoT datasets minus excluded columns
+        estimated_features = 23 - len(exclude_columns)  # Typical total minus excluded
+        return (estimated_features,)
+    
+    def get_num_classes(self, config: Dict[str, Any]) -> int:
+        """Get number of classes for IoT data (binary classification)."""
+        return 2  # Normal vs Anomaly
+
+
+class IoTDataset(Dataset):
+    """PyTorch dataset for IoT network traffic data."""
+    
+    def __init__(self, features: np.ndarray, labels: np.ndarray):
+        """
+        Initialize IoT dataset.
+        
+        Args:
+            features: Feature matrix (n_samples, n_features)
+            labels: Label vector (n_samples,)
+        """
+        self.features = torch.FloatTensor(features)
+        self.labels = torch.LongTensor(labels)
+    
+    def __len__(self) -> int:
+        """Return dataset size."""
+        return len(self.features)
+    
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a single sample."""
+        return self.features[idx], self.labels[idx]
+
+
+# Register dataset loaders
+DatasetRegistry.register_loader("mnist", MNISTLoader)
+DatasetRegistry.register_loader("cifar10", CIFAR10Loader)
+DatasetRegistry.register_loader("custom_csv", CSVLoader)
+DatasetRegistry.register_loader("iot_general", IoTGeneralLoader)

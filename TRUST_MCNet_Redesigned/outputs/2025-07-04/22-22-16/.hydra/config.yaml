@@ -1,0 +1,321 @@
+dataset:
+  name: iot_general
+  path: ./data/IoT_Datasets
+  selection_strategy: auto_detect
+  dataset_files: []
+  num_clients: 5
+  eval_fraction: 0.2
+  batch_size: 32
+  val_ratio: 0.1
+  preprocessing:
+    feature_selection: auto
+    exclude_columns:
+    - timestamp
+    - unique_id
+    - Label
+    - Sub_Label
+    categorical_encoding:
+    - protocol
+    - service
+    - conn_state
+    - history
+    - orig_host
+    - resp_host
+    - tunnel_parents
+    numerical_features:
+    - orig_port
+    - resp_port
+    - duration
+    - orig_bytes
+    - resp_bytes
+    - missed_bytes
+    - orig_pkts
+    - orig_ip_bytes
+    - resp_pkts
+    - resp_ip_bytes
+    boolean_features:
+    - local_orig
+    - local_resp
+    handle_missing_values: true
+    missing_value_strategy: median
+    standardization: true
+    normalization_method: standard
+    scale_features: true
+    remove_outliers: false
+    outlier_method: iqr
+  label_config:
+    target_column: Label
+    normal_labels:
+    - BenignTraffic
+    - Benign
+    - BenignTraffic
+    - Mirai_BenignTraffic
+    anomaly_labels:
+    - DDoS
+    - BruteForce
+    - Recon
+    - Mirai_DDoS
+    - Ransomware
+    - Malicious
+    - bashlite
+    - Mirai
+    - web
+    auto_anomaly_detection: true
+    balance_classes: true
+    balancing_method: undersample
+  partitioning: iid
+  dirichlet_alpha: 0.5
+  iot_config:
+    simulate_heterogeneous_devices: true
+    device_types:
+    - smart_sensor
+    - smart_camera
+    - smart_gateway
+    - medical_device
+    - industrial_controller
+    simulate_network_constraints: true
+    bandwidth_limits:
+      low: 100
+      medium: 500
+      high: 1000
+    edge_computing: true
+    compute_constraints:
+      cpu_cores:
+      - 1
+      - 2
+      - 4
+      memory_mb:
+      - 512
+      - 1024
+      - 2048
+      storage_gb:
+      - 8
+      - 16
+      - 32
+  validation:
+    min_samples_per_client: 10
+    max_samples_per_client: 50000
+    min_features: 5
+    required_columns:
+    - Label
+    check_data_quality: true
+    max_missing_percentage: 0.3
+    min_class_samples: 5
+  transforms:
+    encode_categorical: true
+    log_transform_features:
+    - orig_bytes
+    - resp_bytes
+    - duration
+    create_derived_features: true
+    derived_features:
+    - bytes_ratio
+    - packet_size_avg
+    - connection_rate
+    normalize: true
+    mean:
+    - 0.0
+    std:
+    - 1.0
+env:
+  name: iot_edge
+  device: auto
+  ray:
+    num_cpus: 4
+    num_gpus: 0
+    object_store_memory: 1000000000
+    dashboard_host: 127.0.0.1
+    dashboard_port: 8265
+    ignore_reinit_error: true
+  resources:
+    max_memory_mb: 512
+    max_cpu_percent: 60.0
+    connection_timeout: 60
+    disk_space_mb: 1024
+  monitoring:
+    enabled: true
+    log_level: INFO
+    profile_clients: false
+    resource_monitoring: true
+    memory_alerts: true
+    cpu_alerts: true
+  simulation:
+    backend: ray
+    client_resources:
+      num_cpus: 1
+      num_gpus: 0
+      memory: 128
+    network_constraints:
+      simulate_latency: true
+      latency_ms:
+        min: 50
+        max: 200
+        mean: 100
+      simulate_bandwidth_limits: true
+      bandwidth_kbps:
+        min: 100
+        max: 1000
+        mean: 500
+      packet_loss_rate: 0.01
+      jitter_ms: 10
+    device_simulation:
+      heterogeneous_performance: true
+      performance_levels:
+        low:
+          cpu_scale: 0.5
+          memory_scale: 0.5
+        medium:
+          cpu_scale: 0.8
+          memory_scale: 0.8
+        high:
+          cpu_scale: 1.0
+          memory_scale: 1.0
+      battery_simulation: true
+      battery_levels:
+      - 0.2
+      - 0.5
+      - 0.8
+      - 1.0
+      device_failure_rate: 0.05
+      recovery_time_seconds: 30
+  dataloader:
+    num_workers: 0
+    pin_memory: false
+    prefetch_factor: 2
+    persistent_workers: false
+    dynamic_batch_sizing: true
+    min_batch_size: 8
+    max_batch_size: 32
+    drop_last: false
+    shuffle_buffer_size: 1000
+  security:
+    encrypt_communication: true
+    secure_aggregation: true
+    differential_privacy: false
+    noise_multiplier: 0.1
+  power_management:
+    enabled: true
+    power_profiles:
+      active: 1.0
+      idle: 0.3
+      sleep: 0.1
+    adaptive_frequency_scaling: true
+    thermal_throttling: true
+    max_temperature: 80
+  edge_computing:
+    local_inference: true
+    model_compression: true
+    quantization: true
+    pruning: false
+    enable_caching: true
+    cache_size_mb: 64
+    cache_ttl_seconds: 300
+  fault_tolerance:
+    enable_checkpointing: true
+    checkpoint_frequency: 5
+    auto_recovery: true
+    heartbeat_interval: 30
+    max_retries: 3
+    retry_backoff: 2.0
+strategy:
+  name: fedavg
+  class_name: FedAvg
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  evaluate_metrics_aggregation_fn: null
+  fit_metrics_aggregation_fn: null
+  evaluate_fn: null
+  on_fit_config_fn: null
+  on_evaluate_config_fn: null
+  accept_failures: true
+  initial_parameters: null
+trust:
+  name: hybrid
+  mode: hybrid
+  threshold: 0.5
+  weights:
+    cosine: 0.4
+    entropy: 0.3
+    reputation: 0.3
+  parameters:
+    cosine:
+      min_similarity: 0.1
+      max_similarity: 1.0
+    entropy:
+      min_entropy: 0.0
+      max_entropy: 10.0
+      normalize: true
+    reputation:
+      decay_rate: 0.95
+      min_history: 3
+      performance_weight: 0.7
+      consistency_weight: 0.3
+  update:
+    frequency: 1
+    smoothing_factor: 0.1
+  selection:
+    enabled: true
+    min_trust_score: 0.3
+    max_malicious_ratio: 0.2
+model:
+  name: mlp
+  type: MLP
+  mlp:
+    input_dim: 784
+    hidden_dims:
+    - 256
+    - 128
+    - 64
+    output_dim: 2
+    activation: relu
+    dropout: 0.1
+    batch_norm: false
+  training:
+    loss_function: cross_entropy
+    optimizer: adam
+    learning_rate: 0.001
+    weight_decay: 0.0001
+  initialization:
+    method: xavier_uniform
+    gain: 1.0
+training:
+  epochs: 1
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: adam
+  momentum: 0.9
+  betas:
+  - 0.9
+  - 0.999
+  lr_scheduler: null
+  lr_decay: 0.1
+  lr_patience: 10
+  dropout: 0.0
+  early_stopping: false
+  patience: 5
+  min_delta: 0.0001
+federated:
+  num_rounds: 3
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+simulation:
+  use_legacy: false
+  use_enhanced_client: true
+  enable_trust_evaluation: true
+  trust_threshold: 0.5
+  enable_metrics_aggregation: true
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  log_to_file: false
+  log_file: null
+  metrics:
+    enable_tensorboard: false
+    tensorboard_dir: logs/tensorboard
+    log_frequency: 1
