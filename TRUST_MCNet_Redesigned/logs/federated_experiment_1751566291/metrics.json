@@ -1,0 +1,98 @@
+[
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "num_clients_fit",
+    "value": 0
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "num_failures",
+    "value": 2
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "aggregation_successful",
+    "value": true
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "round",
+    "value": 1
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "timestamp",
+    "value": 1751566318.5430038
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566318.5437691,
+    "metric_name": "type",
+    "value": "aggregation"
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.570783,
+    "metric_name": "round",
+    "value": 1
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.570783,
+    "metric_name": "timestamp",
+    "value": 1751566321.570634
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.570783,
+    "metric_name": "type",
+    "value": "server"
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "simulation_time",
+    "value": 14.201745748519897
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "total_time",
+    "value": 29.70335602760315
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "final_loss",
+    "value": Infinity
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "final_accuracy",
+    "value": 0.0
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "round",
+    "value": 1
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "timestamp",
+    "value": 1751566321.571908
+  },
+  {
+    "step": 1,
+    "timestamp": 1751566321.5719402,
+    "metric_name": "type",
+    "value": "server"
+  }
+]

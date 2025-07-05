@@ -1,0 +1,32 @@
+[
+  {
+    "step": 0,
+    "timestamp": 1751647877.30113,
+    "metric_name": "error",
+    "value": "No module named 'sklearn'"
+  },
+  {
+    "step": 0,
+    "timestamp": 1751647877.30113,
+    "metric_name": "simulation_failed",
+    "value": true
+  },
+  {
+    "step": 0,
+    "timestamp": 1751647877.30113,
+    "metric_name": "round",
+    "value": 0
+  },
+  {
+    "step": 0,
+    "timestamp": 1751647877.30113,
+    "metric_name": "timestamp",
+    "value": 1751647877.3010461
+  },
+  {
+    "step": 0,
+    "timestamp": 1751647877.30113,
+    "metric_name": "type",
+    "value": "server"
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "experiment_name": "federated_experiment_1751647873",
+  "export_timestamp": 1751647877.3011389,
+  "total_rounds": 0,
+  "round_metrics": [
+    {
+      "error": "No module named 'sklearn'",
+      "simulation_failed": true,
+      "round": 0,
+      "timestamp": 1751647877.3010461,
+      "type": "server"
+    }
+  ],
+  "client_metrics": {}
+}

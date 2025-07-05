@@ -1,0 +1,8 @@
+2025-07-04 23:30:20,818 - __main__ - INFO - Available datasets: mnist, synthetic_iot, iot_general, custom_csv
+2025-07-04 23:30:20,818 - __main__ - INFO - Initialized simulation with 1 clients, 1 rounds
+2025-07-04 23:30:20,818 - __main__ - INFO - Datasets to process: 
+2025-07-04 23:30:20,818 - __main__ - INFO - Available datasets:
+2025-07-04 23:30:20,819 - __main__ - INFO -   • mnist
+2025-07-04 23:30:20,819 - __main__ - INFO -   • synthetic_iot
+2025-07-04 23:30:20,819 - __main__ - INFO -   • iot_general
+2025-07-04 23:30:20,819 - __main__ - INFO -   • custom_csv

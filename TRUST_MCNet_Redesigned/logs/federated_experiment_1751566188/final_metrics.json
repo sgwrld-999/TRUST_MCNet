@@ -1,0 +1,15 @@
+{
+  "experiment_name": "federated_experiment_1751566188",
+  "export_timestamp": 1751566208.618283,
+  "total_rounds": 1,
+  "round_metrics": [
+    {
+      "error": "Simulation crashed.",
+      "simulation_failed": true,
+      "round": 1,
+      "timestamp": 1751566208.6182,
+      "type": "server"
+    }
+  ],
+  "client_metrics": {}
+}

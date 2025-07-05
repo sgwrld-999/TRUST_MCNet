@@ -1,0 +1,113 @@
+{
+  "experiment_name": "federated_experiment_1751648231",
+  "export_timestamp": 1751648258.184507,
+  "total_rounds": 3,
+  "round_metrics": [
+    {
+      "server_loss": 0.6874477863311768,
+      "server_metrics": {},
+      "round": 1,
+      "timestamp": 1751648245.486529,
+      "type": "server"
+    },
+    {
+      "server_loss": 0.6811235845088959,
+      "server_metrics": {},
+      "round": 2,
+      "timestamp": 1751648251.1074402,
+      "type": "server"
+    },
+    {
+      "server_loss": 0.6799444854259491,
+      "server_metrics": {},
+      "round": 3,
+      "timestamp": 1751648256.447402,
+      "type": "server"
+    },
+    {
+      "simulation_time": 23.542816638946533,
+      "total_time": 25.190561771392822,
+      "final_loss": 0.6799444854259491,
+      "final_accuracy": 0.0,
+      "round": 3,
+      "timestamp": 1751648256.4483619,
+      "type": "server"
+    }
+  ],
+  "client_metrics": {
+    "7948915537455753516_eval": [
+      {
+        "loss": 0.6966288089752197,
+        "num_examples": 16,
+        "accuracy": 0.5,
+        "correct_predictions": 8,
+        "evaluation_time": 0.1721351146697998,
+        "client_id": "7948915537455753516_eval",
+        "round": 1,
+        "timestamp": 1751648245.486371,
+        "type": "client"
+      },
+      {
+        "loss": 0.686790406703949,
+        "num_examples": 16,
+        "accuracy": 0.5,
+        "correct_predictions": 8,
+        "evaluation_time": 0.1764988899230957,
+        "client_id": "7948915537455753516_eval",
+        "round": 3,
+        "timestamp": 1751648256.44731,
+        "type": "client"
+      }
+    ],
+    "13434166631473464781_eval": [
+      {
+        "loss": 0.6782667636871338,
+        "num_examples": 16,
+        "accuracy": 0.625,
+        "correct_predictions": 10,
+        "evaluation_time": 0.17124295234680176,
+        "client_id": "13434166631473464781_eval",
+        "round": 1,
+        "timestamp": 1751648245.486441,
+        "type": "client"
+      },
+      {
+        "loss": 0.6899950504302979,
+        "num_examples": 16,
+        "accuracy": 0.4375,
+        "correct_predictions": 7,
+        "evaluation_time": 0.18114995956420898,
+        "client_id": "13434166631473464781_eval",
+        "round": 2,
+        "timestamp": 1751648251.1073868,
+        "type": "client"
+      }
+    ],
+    "10701122686214100983_eval": [
+      {
+        "loss": 0.6722521185874939,
+        "num_examples": 16,
+        "accuracy": 0.8125,
+        "correct_predictions": 13,
+        "evaluation_time": 0.18110203742980957,
+        "client_id": "10701122686214100983_eval",
+        "round": 2,
+        "timestamp": 1751648251.1073332,
+        "type": "client"
+      }
+    ],
+    "12476952537323136151_eval": [
+      {
+        "loss": 0.6730985641479492,
+        "num_examples": 16,
+        "accuracy": 0.6875,
+        "correct_predictions": 11,
+        "evaluation_time": 0.17594385147094727,
+        "client_id": "12476952537323136151_eval",
+        "round": 3,
+        "timestamp": 1751648256.447358,
+        "type": "client"
+      }
+    ]
+  }
+}

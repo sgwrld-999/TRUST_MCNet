@@ -1,0 +1,63 @@
+2025-07-05 20:46:38,685 - __main__ - INFO - Available datasets: mnist, synthetic_iot, iot_general, custom_csv
+2025-07-05 20:46:38,685 - __main__ - INFO - Initialized simulation with 5 clients, 3 rounds
+2025-07-05 20:46:38,685 - __main__ - INFO - Datasets to process: mnist, iot_general, custom_csv
+2025-07-05 20:46:38,685 - __main__ - INFO - ================================================================================
+2025-07-05 20:46:38,685 - __main__ - INFO - STARTING MULTI-DATASET FEDERATED LEARNING SIMULATION
+2025-07-05 20:46:38,685 - __main__ - INFO - ================================================================================
+2025-07-05 20:46:38,685 - __main__ - INFO - Configuration:
+2025-07-05 20:46:38,685 - __main__ - INFO -   • Number of clients: 5
+2025-07-05 20:46:38,685 - __main__ - INFO -   • Number of rounds: 3
+2025-07-05 20:46:38,685 - __main__ - INFO -   • Datasets: mnist, iot_general, custom_csv
+2025-07-05 20:46:38,685 - __main__ - INFO - ================================================================================
+2025-07-05 20:46:38,685 - __main__ - INFO - 
+[1/3] Processing dataset: mnist
+2025-07-05 20:46:38,685 - __main__ - INFO - ------------------------------------------------------------
+2025-07-05 20:46:38,686 - __main__ - INFO - Starting experiment exp_1_mnist_204638 with dataset 'mnist'
+2025-07-05 20:46:38,686 - __main__ - INFO - Running command: python demo_refactored.py --verbose
+2025-07-05 20:46:38,686 - __main__ - INFO - Environment: Dataset=mnist, Clients=5, Rounds=3
+2025-07-05 20:46:38,759 - __main__ - INFO - Experiment exp_1_mnist_204638 completed successfully in 0.07s
+2025-07-05 20:46:38,759 - __main__ - INFO - ✅ Dataset 'mnist' completed successfully
+2025-07-05 20:46:38,759 - __main__ - INFO -    Execution time: 0.07s
+2025-07-05 20:46:38,759 - __main__ - INFO - 
+[2/3] Processing dataset: iot_general
+2025-07-05 20:46:38,759 - __main__ - INFO - ------------------------------------------------------------
+2025-07-05 20:46:38,759 - __main__ - INFO - Starting experiment exp_2_iot_general_204638 with dataset 'iot_general'
+2025-07-05 20:46:38,759 - __main__ - INFO - Running command: python demo_refactored.py --verbose
+2025-07-05 20:46:38,759 - __main__ - INFO - Environment: Dataset=iot_general, Clients=5, Rounds=3
+2025-07-05 20:46:38,812 - __main__ - INFO - Experiment exp_2_iot_general_204638 completed successfully in 0.05s
+2025-07-05 20:46:38,812 - __main__ - INFO - ✅ Dataset 'iot_general' completed successfully
+2025-07-05 20:46:38,812 - __main__ - INFO -    Execution time: 0.05s
+2025-07-05 20:46:38,813 - __main__ - INFO - 
+[3/3] Processing dataset: custom_csv
+2025-07-05 20:46:38,813 - __main__ - INFO - ------------------------------------------------------------
+2025-07-05 20:46:38,813 - __main__ - INFO - Starting experiment exp_3_custom_csv_204638 with dataset 'custom_csv'
+2025-07-05 20:46:38,813 - __main__ - INFO - Running command: python demo_refactored.py --verbose
+2025-07-05 20:46:38,813 - __main__ - INFO - Environment: Dataset=custom_csv, Clients=5, Rounds=3
+2025-07-05 20:46:38,866 - __main__ - INFO - Experiment exp_3_custom_csv_204638 completed successfully in 0.05s
+2025-07-05 20:46:38,866 - __main__ - INFO - ✅ Dataset 'custom_csv' completed successfully
+2025-07-05 20:46:38,866 - __main__ - INFO -    Execution time: 0.05s
+2025-07-05 20:46:38,866 - __main__ - INFO - 
+================================================================================
+2025-07-05 20:46:38,866 - __main__ - INFO - SIMULATION COMPLETED - FINAL REPORT
+2025-07-05 20:46:38,866 - __main__ - INFO - ================================================================================
+2025-07-05 20:46:38,866 - __main__ - INFO - Summary:
+2025-07-05 20:46:38,866 - __main__ - INFO -   • Total datasets processed: 3
+2025-07-05 20:46:38,866 - __main__ - INFO -   • Successful experiments: 3
+2025-07-05 20:46:38,866 - __main__ - INFO -   • Failed experiments: 0
+2025-07-05 20:46:38,866 - __main__ - INFO -   • Total execution time: 0.18s
+2025-07-05 20:46:38,866 - __main__ - INFO -   • Average time per dataset: 0.06s
+2025-07-05 20:46:38,867 - __main__ - INFO - 
+Detailed Results:
+2025-07-05 20:46:38,867 - __main__ - INFO -   ✅ mnist:
+2025-07-05 20:46:38,867 - __main__ - INFO -       Status: success
+2025-07-05 20:46:38,867 - __main__ - INFO -       Time: 0.07s
+2025-07-05 20:46:38,867 - __main__ - INFO -   ✅ iot_general:
+2025-07-05 20:46:38,867 - __main__ - INFO -       Status: success
+2025-07-05 20:46:38,867 - __main__ - INFO -       Time: 0.05s
+2025-07-05 20:46:38,867 - __main__ - INFO -   ✅ custom_csv:
+2025-07-05 20:46:38,867 - __main__ - INFO -       Status: success
+2025-07-05 20:46:38,867 - __main__ - INFO -       Time: 0.05s
+2025-07-05 20:46:38,867 - __main__ - INFO - 
+Detailed results saved to: simulation_results_20250705_204638.json
+2025-07-05 20:46:38,867 - __main__ - INFO - ================================================================================
+2025-07-05 20:46:38,867 - __main__ - INFO - All experiments completed successfully!

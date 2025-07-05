@@ -1,0 +1,4 @@
+step,timestamp,metric_name,value
+0,1751647877.301047,simulation_failed,True
+0,1751647877.301047,round,0
+0,1751647877.301047,timestamp,1751647877.3010461
