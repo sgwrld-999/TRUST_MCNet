@@ -414,7 +414,7 @@ python train.py trust=hybrid
 ## Advanced Usage
 
 ### 1. Large-Scale Simulations
-
+  
 #### High Client Count (50+ clients)
 ```bash
 # Configure for high client count
