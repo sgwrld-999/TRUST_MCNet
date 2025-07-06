@@ -89,7 +89,24 @@ Based on a comprehensive analysis of the TRUST-MCNet codebase, this report evalu
 
 ### ❌ MISSING CRITICAL COMPONENTS
 
+#### 1. Mission-Critical Network Simulation
+- **MISSING**: Realistic MCN testbed simulation
+- **REQUIRED**: SCADA, aircraft networks, industrial control systems simulation
+- **CURRENT**: Only general IoT datasets, no MCN-specific scenarios
 
+#### 2. Adversarial Attack Simulation
+- **MISSING**: Comprehensive adversarial testing framework
+- **REQUIRED**: 
+  - SCADA disruption attacks
+  - Industrial control hijacking simulation
+  - Data exfiltration scenarios
+  - Model poisoning attack implementations
+- **CURRENT**: Basic trust mechanisms without adversarial validation
+
+#### 3. Regulatory Compliance Features
+- **MISSING**: Privacy and regulatory constraint handling
+- **REQUIRED**: Data privacy mechanisms, compliance reporting
+- **CURRENT**: Basic federated learning without specific compliance features
 
 ## Performance Results Analysis
 
