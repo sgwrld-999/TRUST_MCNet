@@ -1,0 +1,4 @@
+- dataset=synthetic_iot
+- model=mlp
+- strategy=fedadam
+- trust=hybrid

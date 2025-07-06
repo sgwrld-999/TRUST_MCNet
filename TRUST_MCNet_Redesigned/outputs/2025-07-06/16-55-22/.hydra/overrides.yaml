@@ -1,0 +1,4 @@
+- dataset=mnist
+- model=mlp
+- strategy=fedadam
+- trust=hybrid
