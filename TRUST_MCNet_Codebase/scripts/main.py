@@ -42,7 +42,6 @@ def create_model(config):
     if model_type == 'MLP':
         return MLP(
             input_dim=config.get('model.mlp.input_dim', 10),
-            hidden_dims=config.get('model.mlp.hidden_dims', [64, 32]),
             output_dim=config.get('model.mlp.output_dim', 2)
         )
     elif model_type == 'LSTM':

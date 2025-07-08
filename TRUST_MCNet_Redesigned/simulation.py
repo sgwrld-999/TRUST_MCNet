@@ -216,7 +216,6 @@ def _create_initial_model(model_config: Dict[str, Any]) -> nn.Module:
     if model_config['type'] == 'MLP':
         model = MLP(
             input_dim=model_config['mlp']['input_dim'],
-            hidden_dims=model_config['mlp']['hidden_dims'],
             output_dim=model_config['mlp']['output_dim']
         )
     elif model_config['type'] == 'LSTM':

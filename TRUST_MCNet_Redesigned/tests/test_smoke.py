@@ -118,7 +118,6 @@ class TestFederatedLearningSmoke(unittest.TestCase):
             try:
                 mlp = MLP(
                     input_dim=784,
-                    hidden_dims=[32, 16],
                     output_dim=10
                 )
                 self.assertIsNotNone(mlp)

@@ -181,7 +181,6 @@ def client_fn(cid: str, config: Dict[str, Any]) -> fl.client.Client:
     if model_config["type"] == "MLP":
         model = MLP(
             input_dim=model_config["mlp"]["input_dim"],
-            hidden_dims=model_config["mlp"]["hidden_dims"],
             output_dim=model_config["mlp"]["output_dim"]
         )
     elif model_config["type"] == "LSTM":
@@ -256,7 +255,6 @@ def run_flwr_simulation(config_path: str):
     if model_config.get('type') == 'MLP':
         global_model = MLP(
             input_dim=model_config.get('mlp', {}).get('input_dim', 10),
-            hidden_dims=model_config.get('mlp', {}).get('hidden_dims', [64, 32, 16]),
             output_dim=model_config.get('mlp', {}).get('output_dim', 2)
         )
     elif model_config.get('type') == 'LSTM':

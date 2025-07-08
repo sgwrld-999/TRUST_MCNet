@@ -279,13 +279,9 @@ def _create_initial_model(model_config: DictConfig, dataset_info: Dict[str, Any]
     output_dim = dataset_info['num_classes']
     
     if model_type.upper() == 'MLP':
-        # Get MLP config
-        mlp_config = model_config.get('mlp', {})
-        hidden_dims = mlp_config.get('hidden_dims', [128, 64])
-        
+        # MLP now has a fixed architecture
         model = MLP(
             input_dim=input_dim,
-            hidden_dims=hidden_dims,
             output_dim=output_dim
         )
     elif model_type.upper() == 'LSTM':

@@ -103,7 +103,6 @@ def run_example():
         # Create model for each client
         model = MLP(
             input_dim=config.get('model.mlp.input_dim', 10),
-            hidden_dims=config.get('model.mlp.hidden_dims', [64, 32]),
             output_dim=config.get('model.mlp.output_dim', 2)
         )
         
