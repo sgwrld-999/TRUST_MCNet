@@ -744,3 +744,69 @@ class TrustEvaluator:
             List of weight vectors [α, β, γ] over time
         """
         return self.theta_history
+    
+    def evaluate_trust_batch(self, client_updates: Dict[str, List[np.ndarray]]) -> Dict[str, float]:
+        """
+        Evaluate trust scores for a batch of clients.
+        
+        Args:
+            client_updates: Dictionary mapping client IDs to their model updates
+            
+        Returns:
+            Dictionary mapping client IDs to their trust scores
+        """
+        trust_scores = {}
+        
+        try:
+            # Convert numpy arrays to tensors if needed
+            converted_updates = {}
+            for client_id, update in client_updates.items():
+                if isinstance(update, list) and len(update) > 0:
+                    if isinstance(update[0], np.ndarray):
+                        # Convert numpy arrays to tensors
+                        converted_updates[client_id] = {
+                            f'layer_{i}': torch.from_numpy(arr).float() 
+                            for i, arr in enumerate(update)
+                        }
+                    else:
+                        # Already tensors or other format
+                        converted_updates[client_id] = {
+                            f'layer_{i}': update[i] if isinstance(update[i], torch.Tensor) 
+                            else torch.tensor(update[i]).float()
+                            for i in range(len(update))
+                        }
+                else:
+                    # Empty or invalid update
+                    converted_updates[client_id] = {}
+            
+            # Calculate trust scores for each client
+            for client_id, model_update in converted_updates.items():
+                try:
+                    if len(model_update) == 0:
+                        trust_scores[client_id] = 0.0
+                        continue
+                        
+                    # Use simple trust calculation for batch processing
+                    if self.trust_mode == 'cosine':
+                        trust_score = self._cosine_trust(model_update, {}, {})
+                    elif self.trust_mode == 'entropy':
+                        trust_score = self._entropy_trust(model_update, None)
+                    elif self.trust_mode == 'reputation':
+                        trust_score = self._reputation_trust(client_id, {}, 1, 1.0, 0)
+                    elif self.trust_mode == 'hybrid':
+                        trust_score = self._hybrid_trust(client_id, model_update, {}, {}, 1, {}, None, 1.0, 0)
+                    else:
+                        trust_score = 0.5  # Default neutral trust
+                        
+                    trust_scores[client_id] = max(0.0, min(1.0, trust_score))
+                    
+                except Exception as e:
+                    self.logger.warning(f"Trust evaluation failed for client {client_id}: {e}")
+                    trust_scores[client_id] = 0.5  # Default neutral trust on error
+            
+        except Exception as e:
+            self.logger.error(f"Batch trust evaluation failed: {e}")
+            # Return neutral trust for all clients on error
+            trust_scores = {client_id: 0.5 for client_id in client_updates.keys()}
+        
+        return trust_scores

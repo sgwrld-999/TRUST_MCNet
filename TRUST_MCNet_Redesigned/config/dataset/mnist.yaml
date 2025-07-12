@@ -27,4 +27,4 @@ dataset:
     
   # Data validation
   min_samples_per_client: 10
-  max_samples_per_client: 10000
+  max_samples_per_client: 15000  # Increased to allow for larger client datasets

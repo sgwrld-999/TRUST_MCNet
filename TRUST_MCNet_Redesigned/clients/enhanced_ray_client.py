@@ -402,22 +402,27 @@ class EnhancedRayFlowerClient:
                 # Get updated parameters
                 updated_parameters = self.get_parameters({})
                 
-                # Prepare metrics
+                # Prepare metrics (only simple types for Flower compatibility)
                 metrics = {
-                    'train_loss': avg_loss,
-                    'training_time': training_time,
-                    'epochs_completed': epochs,
-                    'total_examples': total_examples,
-                    'client_id': self.client_id,
-                    'epoch_metrics': epoch_metrics,
-                    'learning_rate': self.optimizer.param_groups[0]['lr']
+                    'train_loss': float(avg_loss),
+                    'training_time': float(training_time),
+                    'epochs_completed': int(epochs),
+                    'total_examples': int(total_examples),
+                    'client_id': str(self.client_id),
+                    'learning_rate': float(self.optimizer.param_groups[0]['lr']),
+                    # Add summarized epoch metrics instead of full list
+                    'avg_epoch_loss': float(np.mean([em['loss'] for em in epoch_metrics]) if epoch_metrics else 0.0),
+                    'final_epoch_loss': float(epoch_metrics[-1]['loss'] if epoch_metrics else 0.0),
+                    'total_epoch_time': float(sum([em['time'] for em in epoch_metrics]) if epoch_metrics else 0.0)
                 }
                 
-                # Store performance history
+                # Store performance history (only essential metrics to avoid memory issues)
                 self.performance_history.append({
                     'timestamp': time.time(),
                     'type': 'training',
-                    'metrics': metrics
+                    'loss': float(avg_loss),
+                    'examples': int(total_examples),
+                    'time': float(training_time)
                 })
                 
                 logger.info(f"Client {self.client_id}: Training completed in {training_time:.2f}s, "
@@ -496,17 +501,20 @@ class EnhancedRayFlowerClient:
                 accuracy = correct / total_examples if total_examples > 0 else 0.0
                 
                 metrics = {
-                    'accuracy': accuracy,
-                    'correct_predictions': correct,
-                    'evaluation_time': evaluation_time,
-                    'client_id': self.client_id
+                    'accuracy': float(accuracy),
+                    'correct_predictions': int(correct),
+                    'evaluation_time': float(evaluation_time),
+                    'client_id': str(self.client_id)
                 }
                 
-                # Store performance history
+                # Store performance history (only essential metrics to avoid memory issues)
                 self.performance_history.append({
                     'timestamp': time.time(),
                     'type': 'evaluation',
-                    'metrics': metrics
+                    'loss': float(avg_loss),
+                    'accuracy': float(accuracy),
+                    'examples': int(total_examples),
+                    'time': float(evaluation_time)
                 })
                 
                 logger.info(f"Client {self.client_id}: Evaluation completed in {evaluation_time:.2f}s, "
@@ -588,7 +596,7 @@ def create_ray_client_fn(client_subsets: List[Subset], cfg: Dict[str, Any]):
                 cfg=cfg
             )
             
-            return RayClientWrapper(ray_client)
+            return RayClientWrapper(ray_client).to_client()  # Convert to Client for Flower compatibility
             
         except Exception as e:
             logger.error(f"Failed to create client {cid}: {e}")
