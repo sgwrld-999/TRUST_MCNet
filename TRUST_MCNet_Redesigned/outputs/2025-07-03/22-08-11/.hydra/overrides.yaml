@@ -1,3 +1,0 @@
-- env=iot
-- federated.num_rounds=10
-- dataset.num_clients=3

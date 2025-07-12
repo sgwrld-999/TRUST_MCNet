@@ -1,3 +1,0 @@
-Model Type,Accuracy,Precision,Recall,F1-Score,Detection Rate
-Federated (Random Weights),0.2163,0.2163,1.0,0.3556688317027049,1.0
-Centralized (Baseline),0.9922,0.9797514956281639,0.9842810910772076,0.9820110701107012,0.9842810910772076

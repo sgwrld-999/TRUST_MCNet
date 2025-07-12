@@ -1,687 +1,671 @@
-# TRUST MCNet (Multi-Client Network)
+# TRUST-MCNet: Federated Learning Framework with Trust Mechanisms
 
-A comprehensive federated learning framework for **anomaly detection** with **trust mechanisms** and **IoT device optimization**.
+A modern, production-ready federated learning framework for **IoT anomaly detection** with **advanced trust evaluation mechanisms**, built using enterprise-grade architecture patterns and best practices.
 
-## Project Overview
+## 🚀 Project Overview
 
-TRUST MCNet is an advanced distributed machine learning system that enables multiple IoT clients to collaboratively train models for anomaly detection while maintaining data privacy. The framework includes sophisticated trust mechanisms to ensure reliable collaboration between resource-constrained devices and supports both traditional federated learning and modern Flower (Flwr) integration.
+This completely redesigned TRUST-MCNet framework introduces:
 
-## Key Features
+- **🏗️ Modern Architecture**: Strategy and Registry patterns with dependency injection
+- **⚙️ Advanced Configuration**: OmegaConf schemas with hierarchical config groups
+- **🔧 Enhanced Resource Management**: Ray context managers with guaranteed cleanup
+- **📊 Comprehensive Metrics**: TensorBoard/MLflow integration with federated logging
+- **🧪 Robust Testing**: Full test suite with unit, integration, and smoke tests
+- **💾 Memory Optimization**: Automatic GPU cache clearing and garbage collection
+- **🔄 Fault Tolerance**: Retry logic, error handling, and graceful degradation
+- **📈 Multi-Epoch Training**: Configurable local training with advanced client logic
 
-- ** Federated Learning**: Distributed training across multiple IoT clients with privacy preservation
-- ** Advanced Trust Mechanisms**: Multi-modal trust evaluation (cosine similarity, entropy, reputation)
-- ** IoT Optimization**: Resource monitoring, adaptive batch sizing, memory management
-- ** Multi-Model Support**: MLP and LSTM architectures for different data types
-- **⚠ Anomaly Detection**: Specialized binary classification for detecting anomalous patterns
-- ** Flwr Integration**: Modern federated learning with FedAdam strategy
-- ** Comprehensive Metrics**: Detailed evaluation, visualization, and experiment tracking
-- ** Attack Simulation**: Built-in capabilities for testing robustness (label flipping, Gaussian noise)
+## 🏛️ Architecture Overview
 
-## Architecture Overview
+The framework follows **SOLID principles** and uses modern patterns:
 
-### Core Pipeline Components
+- **Strategy Pattern**: Pluggable dataset partitioning (IID, Dirichlet, Pathological)
+- **Registry Pattern**: Extensible dataset and partitioner management
+- **Context Managers**: Guaranteed Ray resource cleanup and memory management
+- **Configuration as Code**: OmegaConf dataclass schemas with validation
+- **Dependency Injection**: Clean separation of concerns and testability
 
-```
- IoT Clients (5-50 devices)
-    ↓ Local Training
- Trust Evaluator (Cosine + Entropy + Reputation)
-    ↓ Trust Scores
- Flwr Server (FedAdam Strategy)
-    ↓ Weighted Aggregation
- Global Model Update
-    ↓ Broadcast
- Evaluation & Results
-```
+### Core Technologies
 
-### Data Pipeline
-- **MNIST Dataset**: Converted to binary anomaly detection (digits 1,7 as anomalies)
-- **Synthetic IoT Data**: Generated sensor data with configurable anomaly patterns
-- **Custom Datasets**: Support for CSV data with preprocessing
-- **Data Distribution**: Both IID and non-IID federated splits
+- **Hydra + OmegaConf**: Type-safe hierarchical configuration
+- **Ray**: Distributed actor-based client execution
+- **Flower**: Modern federated learning simulation
+- **PyTorch**: Deep learning with automatic GPU management
+- **TensorBoard/MLflow**: Experiment tracking and visualization
 
-### Trust Mechanisms
-1. **Cosine Similarity**: Trust based on model update similarity to global model
-2. **Entropy-based**: Higher parameter entropy indicates better model diversity
-3. **Reputation**: Historical performance tracking and scoring
-4. **Hybrid Combination**: Weighted combination (0.4, 0.3, 0.3) of all methods
-
-### IoT Optimizations
-- **Resource Monitoring**: Real-time CPU and memory tracking
-- **Adaptive Training**: Dynamic batch size and epoch adjustment
-- **Memory Management**: Automatic cleanup and single-threaded operations
-- **Connection Handling**: Timeout management and retry mechanisms
-
-## System Architecture
-
-```mermaid
-graph TD
-    A[Configuration Manager] --> B[Data Loader]
-    A --> C[Model Factory]
-    B --> D[MNIST/Synthetic Data]
-    D --> E[Client Dataset Distribution]
-    
-    C --> F[MLP Model]
-    C --> G[LSTM Model]
-    
-    E --> H[Client 1]
-    E --> I[Client 2]
-    E --> J[Client N]
-    
-    H --> K[Local Training]
-    I --> K
-    J --> K
-    
-    K --> L[IoT Resource Monitor]
-    L --> M[Adaptive Batch Sizing]
-    
-    K --> N[Trust Evaluator]
-    N --> O[Cosine Similarity]
-    N --> P[Entropy Analysis]
-    N --> Q[Reputation Scoring]
-    
-    O --> R[Hybrid Trust Score]
-    P --> R
-    Q --> R
-    
-    R --> S[Flwr Server - FedAdam]
-    S --> T[Weighted Aggregation]
-    T --> U[Global Model Update]
-    U --> V[Broadcast to Clients]
-    
-    V --> W[Evaluation]
-    W --> X[Results & Visualization]
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 TRUST_MCNet/
-├── TRUST_MCNet_Codebase/           # Main framework code
-│   ├── clients/                    # Client implementations
-│   │   ├── client.py              # Enhanced IoT client with resource monitoring
-│   │   └── flwr_client.py         # Flower client with trust mechanisms
-│   ├── server/                     # Server implementations
-│   │   ├── server.py              # Traditional federated server
-│   │   └── flwr_server.py         # Flower server with FedAdam + Trust
-│   ├── models/                     # Neural network architectures
-│   │   └── model.py               # MLP and LSTM models
-│   ├── data/                       # Data loading and preprocessing
-│   │   ├── data_loader.py         # MNIST and synthetic data loaders
-│   │   └── preprocess.py          # Data preprocessing utilities
-│   ├── trust_module/               # Trust evaluation system
-│   │   └── trust_evaluator.py     # Multi-modal trust mechanisms
-│   ├── utils/                      # Utility functions
-│   │   ├── aggregator.py          # Model aggregation strategies
-│   │   ├── attack_simulator.py    # Attack simulation tools
-│   │   ├── metrics.py             # Comprehensive evaluation metrics
-│   │   └── results_manager.py     # Experiment logging and visualization
-│   ├── scripts/                    # Execution scripts
-│   │   ├── main.py                # Main entry point
-│   │   ├── flwr_simulation.py     # Flower federated learning simulation
-│   │   ├── baseline_experiment.py # Baseline with random aggregation
-│   │   └── evaluate.py            # Model evaluation utilities
-│   ├── config/                     # Configuration management
-│   │   └── config.yaml            # Main configuration file
-│   └── explainability/             # Model explainability tools
-│       └── shap_wrapper.py        # SHAP analysis integration
-├── examples/                       # Usage examples
-│   └── basic_example.py           # Simple federated learning demo
-├── results/                        # Experiment results and logs
-├── data/                          # Dataset storage
-│   └── MNIST/                     # MNIST dataset files
-├── Makefile                       # Build and execution commands
-├── requirements.txt               # Python dependencies
-├── setup_flwr.sh                 # Flower setup script
-└── README.md                      # This documentation
+├── src/trust_mcnet/                  # Main package source code
+│   ├── clients/                     # Federated learning clients
+│   ├── core/                        # Core framework components
+│   ├── models/                      # Neural network models
+│   ├── trust_module/                # Trust evaluation mechanisms
+│   ├── utils/                       # Utility functions
+│   ├── strategies/                  # FL strategies and algorithms
+│   ├── partitioning/               # Data partitioning methods
+│   ├── metrics/                    # Evaluation metrics
+│   └── explainability/            # Model explanation tools
+├── config/                          # Configuration management
+│   ├── schemas.py                   # OmegaConf dataclass schemas
+│   ├── training/                    # Training configurations
+│   ├── dataset/                     # Dataset configurations
+│   └── ray/                         # Ray cluster configurations
+├── data/                            # Datasets and data processing
+├── examples/                        # Usage examples and demos
+│   └── start_simulation.py          # Main simulation script
+├── scripts/                         # Experiment scripts
+├── tests/                           # Test suite
+├── docs/                            # Documentation
+│   ├── api/                         # API documentation
+│   ├── reports/                     # Analysis reports
+│   └── diagrams/                    # Architecture diagrams
+├── logs/                            # Runtime logs
+├── outputs/                         # Experiment outputs
+├── results/                         # Simulation results
+├── pyproject.toml                   # Modern Python packaging
+├── requirements.txt                 # Dependencies
+└── README.md                        # This file
+```
+│   │   └── custom_csv.yaml
+│   ├── env/                         # Environment configurations
+│   │   ├── local.yaml
+│   │   ├── iot.yaml
+│   │   └── gpu.yaml
+│   ├── strategy/                    # FL strategy configurations
+│   │   ├── fedavg.yaml
+│   │   ├── fedadam.yaml
+│   │   └── fedprox.yaml
+│   ├── trust/                       # Trust mechanism configurations
+│   │   ├── hybrid.yaml
+│   │   ├── cosine.yaml
+│   │   ├── entropy.yaml
+│   │   └── reputation.yaml
+│   └── model/                       # Model architecture configurations
+│       ├── mlp.yaml
+│       └── lstm.yaml
+├── clients/                          # Client implementations
+│   ├── enhanced_ray_client.py       # Enhanced client with error handling
+│   └── ray_flwr_client.py          # Original Ray Flower client
+├── utils/                           # Utility modules
+│   ├── partitioning.py             # Strategy pattern for data partitioning
+│   ├── dataset_registry.py         # Registry pattern for dataset management
+│   ├── ray_utils.py                # Ray context managers and utilities
+│   ├── metrics_logger.py           # Federated metrics logging system
+│   └── data_utils.py               # Core data utilities
+├── models/                          # Model definitions
+│   └── model.py                    # MLP and LSTM implementations
+├── trust_module/                    # Trust evaluation system
+│   └── trust_evaluator.py         # Multi-modal trust mechanisms
+├── tests/                           # Comprehensive test suite
+│   ├── __init__.py                 # Test runner and utilities
+│   ├── test_partitioning.py        # Partitioner strategy tests
+│   ├── test_dataset_registry.py    # Dataset registry tests
+│   ├── test_models.py              # Model architecture tests
+│   └── test_smoke.py               # End-to-end smoke tests
+├── enhanced_simulation.py          # New orchestrator with all patterns
+├── simulation.py                    # Original simulation logic
+├── train.py                         # Hydra entry point
+├── examples.py                      # Usage examples and demos
+├── requirements.txt                 # Production dependencies
+├── pyproject.toml                   # Modern packaging and dev tools
+└── README.md                        # This documentation
 ```
 
-## Requirements
+## 🔧 Installation & Setup
 
-- **Python**: 3.8+ (3.9+ recommended for optimal performance)
-- **Core ML Libraries**:
-  - PyTorch >= 1.9.0
-  - scikit-learn >= 1.0.0
-  - NumPy >= 1.21.0
-  - Pandas >= 1.3.0
-- **Federated Learning**:
-  - Flower (flwr) >= 1.6.0
-  - flwr-datasets >= 0.0.2
-- **IoT & Monitoring**:
-  - psutil >= 5.9.0 (resource monitoring)
-  - Ray >= 2.8.0 (distributed computing)
-- **Visualization & Analysis**:
-  - Matplotlib >= 3.4.0
-  - Seaborn >= 0.11.0
-  - SHAP >= 0.41.0 (explainability)
-- **Configuration & Utilities**:
-  - PyYAML >= 5.4.0
-  - tqdm >= 4.62.0
+### Prerequisites
+- Python 3.8+ (recommended: 3.9+)
+- PyTorch 1.12+ with CUDA support (optional)
+- 8GB+ RAM for medium datasets
+- CUDA-compatible GPU (optional, for acceleration)
 
-## Quick Installation
+### Quick Installation
 
-### Option 1: Automatic Setup (Recommended)
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd TRUST_MCNet
+# Clone and navigate to the redesigned directory
+cd TRUST_MCNet_Redesigned
 
-# Run automatic setup (installs all dependencies)
-chmod +x setup_flwr.sh
-./setup_flwr.sh
-
-# Or use Makefile
-make install-flwr
-```
-
-### Option 2: Manual Installation
-```bash
-# Install core dependencies
+# Install all dependencies (including dev tools)
 pip install -r requirements.txt
 
-# Verify installation
-make test-flwr
+# Alternative: Install in development mode with all extras
+pip install -e .[dev,docs,experiment]
+
+# Verify installation by running tests
+python -m tests
+
+# Quick smoke test
+python enhanced_simulation.py --config-name=config dataset=mnist
 ```
 
-### Option 3: Development Setup
+### Data Preparation
+- **MNIST**: Downloads automatically on first run
+- **Custom CSV**: Place files in `data/` directory with target column named 'label'
+- **Validation**: All datasets undergo automatic preprocessing and validation
+
+## 🚀 Usage Examples
+
+### Basic Training
+
 ```bash
-# Install with development tools
-make install-dev
+# Enhanced simulation with all new features (RECOMMENDED)
+python enhanced_simulation.py
 
-# Install in development mode
-make dev-install
+# Original simulation (legacy compatibility)
+python train.py
+
+# Override any configuration group
+python enhanced_simulation.py dataset=custom_csv model=lstm training=multi_epoch
 ```
 
-## Configuration
+### Advanced Configuration
 
-The system is highly configurable through `TRUST_MCNet_Codebase/config/config.yaml`:
+```bash
+# Multi-epoch training with enhanced logging
+python enhanced_simulation.py training=multi_epoch ray=distributed
 
-### Key Configuration Sections
+# GPU training with memory optimization
+python enhanced_simulation.py env=gpu training.enable_gpu_optimization=true
+
+# IoT edge deployment simulation
+python enhanced_simulation.py env=iot dataset.num_clients=10 training.local_epochs=3
+
+# Custom partitioning strategies
+python enhanced_simulation.py dataset.partitioning=dirichlet dataset.alpha=0.5
+```
+
+### Experiment Tracking & Monitoring
+
+```bash
+# Enable TensorBoard logging
+python enhanced_simulation.py metrics.enable_tensorboard=true
+
+# Full experiment tracking with MLflow
+python enhanced_simulation.py metrics.enable_mlflow=true metrics.experiment_name="my_experiment"
+
+# Export detailed metrics to CSV
+python enhanced_simulation.py metrics.save_csv=true metrics.output_dir="./results"
+```
+
+### Testing & Validation
+
+```bash
+# Run full test suite
+python -m tests
+
+# Run specific test categories
+python -m tests.test_partitioning  # Test partitioning strategies
+python -m tests.test_models        # Test model architectures
+python -m tests.test_smoke         # End-to-end smoke tests
+
+# Performance profiling
+python enhanced_simulation.py training.profile_memory=true training.profile_compute=true
+```
+
+
+## ⚙️ Configuration System
+
+The new configuration system uses **OmegaConf dataclass schemas** for type safety and validation:
+
+### Configuration Schema (`config/schemas.py`)
+
+```python
+@dataclass
+class TrainingConfig:
+    local_epochs: int = 1
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    enable_gpu_optimization: bool = True
+    max_retries: int = 3
+    
+@dataclass  
+class DatasetConfig:
+    name: str = "mnist"
+    num_clients: int = 5
+    partitioning: str = "iid"  # iid, dirichlet, pathological
+    alpha: float = 0.5         # For Dirichlet partitioning
+    
+@dataclass
+class MetricsConfig:
+    enable_tensorboard: bool = False
+    enable_mlflow: bool = False
+    save_csv: bool = True
+    experiment_name: str = "federated_experiment"
+```
+
+### Main Configuration (`config/config.yaml`)
 
 ```yaml
-# Model Architecture
-model:
-  type: "MLP"                    # MLP or LSTM
-  mlp:
-    input_dim: 784               # 28*28 for MNIST
-    hidden_dims: [256, 128, 64]  # Hidden layer sizes
-    output_dim: 2                # Binary classification
+defaults:
+  - training: default      # or multi_epoch
+  - ray: local            # or distributed  
+  - dataset: mnist        # or custom_csv
+  - env: local           # local, gpu, iot
+  - strategy: fedavg     # fedavg, fedadam, fedprox
+  - trust: hybrid        # hybrid, cosine, entropy, reputation
+  - model: mlp           # mlp, lstm
+  - _self_              # Include this config
 
-# Federated Learning
+# Global federated learning settings
 federated:
-  num_clients: 5                 # Number of participating clients
-  num_rounds: 3                  # Training rounds
-  strategy: "FedAdam"            # Aggregation strategy
-  
-  # FedAdam Parameters
-  strategy_config:
-    eta: 0.001                   # Server learning rate
-    eta_l: 0.001                 # Client learning rate
-    beta_1: 0.9                  # Momentum parameter
-    beta_2: 0.999                # Second moment parameter
-    tau: 0.001                   # Control variates
+  num_rounds: 3
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 1
+  min_available_clients: 2
 
-  # IoT Optimizations
-  iot_config:
-    max_memory_mb: 512           # Memory limit per client
-    max_cpu_percent: 70          # CPU usage limit
-    adaptive_batch_size: true    # Dynamic batch sizing
-    min_batch_size: 8
-    max_batch_size: 64
-
-# Trust Mechanisms
-trust:
-  enabled: true
-  trust_threshold: 0.7           # Minimum trust for participation
-  trust_decay_factor: 0.95       # Historical trust decay
-  reputation_weight: 0.3         # Reputation importance
-
-# Data Configuration
-data:
-  dataset_type: "mnist"          # mnist, synthetic, csv
-  anomaly_digits: [1, 7]         # MNIST digits treated as anomalies
-  distribution: "iid"            # iid or non_iid
-  anomaly_ratio: 0.1             # Proportion of anomalies
+# Enhanced simulation settings  
+simulation:
+  use_enhanced_client: true
+  enable_trust_evaluation: true
+  trust_threshold: 0.5
+  enable_metrics_aggregation: true
 ```
 
-## Step-by-Step Execution Guide
+### Training Configurations
 
-### 🚀 Quick Start (5 minutes)
-
-```bash
-# 1. Setup environment
-./setup_flwr.sh
-
-# 2. Run default simulation
-make run-flwr
-```
-
-### 📋 Detailed Execution Steps
-
-#### **Step 1: Environment Setup**
-```bash
-# Verify Python version (3.8+)
-python3 --version
-
-# Clone and setup
-git clone <repository-url>
-cd TRUST_MCNet
-chmod +x setup_flwr.sh
-./setup_flwr.sh
-
-# Verify installation
-make test-flwr
-```
-
-#### **Step 2: Configuration (Optional)**
-```bash
-# Edit configuration file
-nano TRUST_MCNet_Codebase/config/config.yaml
-
-# Key parameters to modify:
-# - num_clients: Number of federated clients (5-50)
-# - num_rounds: Training rounds (3-100)
-# - dataset_type: "mnist" or "synthetic"
-# - trust.enabled: Enable/disable trust mechanisms
-```
-
-#### **Step 3: Run Simulations**
-
-**Option A: Flwr Simulation (Recommended)**
-```bash
-# Default parameters (5 clients, 3 rounds, MNIST)
-make run-flwr
-
-# Custom parameters
-make run-flwr-custom
-# Equivalent to:
-# cd TRUST_MCNet_Codebase
-# python scripts/flwr_simulation.py --config config/config.yaml --clients 10 --rounds 50
-
-# Non-IID data distribution
-make run-flwr-noniid
-
-# Direct execution with custom args
-cd TRUST_MCNet_Codebase
-python scripts/flwr_simulation.py \
-    --config config/config.yaml \
-    --clients 20 \
-    --rounds 30 \
-    --data-distribution non_iid
-```
-
-**Option B: Baseline Experiment (Random Aggregation)**
-```bash
-# Run baseline with random weight aggregation
-make run-baseline
-
-# Custom baseline parameters
-make run-baseline-custom
-
-# MNIST verification baseline
-make run-mnist-baseline
-```
-
-**Option C: Simple Example**
-```bash
-# Basic demo with dummy data
-make example
-```
-
-#### **Step 4: Monitor Results**
-```bash
-# Results are saved in: TRUST_MCNet_Codebase/results/
-# Each experiment creates a timestamped directory:
-# results/experiment_name_YYYYMMDD_HHMMSS/
-#   ├── experiment.log          # Detailed logs
-#   ├── metrics.json            # All metrics data
-#   └── plots/                  # Visualizations
-#       ├── training_curves.png
-#       ├── trust_evolution.png
-#       └── client_performance.png
-
-# View live logs
-tail -f TRUST_MCNet_Codebase/results/*/experiment.log
-
-# Check GPU availability (optional)
-python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
-```
-
-### 🔧 Advanced Usage
-
-#### **Custom Dataset**
-```bash
-# Modify config.yaml for custom CSV data
-data:
-  dataset_type: "csv"
-  data_path: "path/to/your/data.csv"
-  target_column: "label"
-  feature_columns: ["feature1", "feature2", ...]
-
-# Run simulation
-make run-flwr
-```
-
-#### **Attack Simulation**
-```bash
-# Enable attack simulation in client code
-# Supports: label_flipping, gaussian_noise
-# Configure in client initialization
-```
-
-#### **Performance Tuning**
-```bash
-# For faster training (fewer clients/rounds)
-python scripts/flwr_simulation.py --clients 3 --rounds 10
-
-# For comprehensive evaluation (more clients/rounds)
-python scripts/flwr_simulation.py --clients 50 --rounds 100
-
-# Memory-constrained devices
-# Modify iot_config in config.yaml:
-iot_config:
-  max_memory_mb: 256
-  max_cpu_percent: 50
-  min_batch_size: 4
-```
-
-### 📊 Understanding Results
-
-#### **Key Metrics**
-- **Accuracy**: Global model classification accuracy
-- **Detection Rate**: Anomaly detection recall
-- **Trust Scores**: Client reliability scores (0-1)
-- **Resource Usage**: CPU/memory utilization per client
-- **Training Time**: Per-round and total training time
-
-#### **Result Files**
-- `experiment.log`: Comprehensive execution logs
-- `metrics.json`: All metrics in JSON format
-- `plots/`: Visualization files
-- `simulation_results.txt`: Summary statistics
-
-#### **Visualization**
-The system automatically generates:
-- Training accuracy/loss curves
-- Trust score evolution
-- Client performance comparison
-- Resource utilization charts
-- Confusion matrices for anomaly detection
-
-## Pipeline Execution Flow
-
-### 1. **Initialization Phase**
-```
-📋 Load config.yaml
-    ↓
-📁 Initialize data loader (MNIST/Synthetic)
-    ↓
-🧠 Create global model (MLP/LSTM)
-    ↓
-🔀 Distribute data among clients (IID/non-IID)
-    ↓
-📱 Initialize client instances with IoT monitoring
-```
-
-### 2. **Federated Training Loop**
-```
-🔄 For each round (1 to num_rounds):
-    │
-    ├── 🎯 Client Selection
-    │   ├── Round 1: Random selection
-    │   └── Round 2+: Trust-based selection
-    │
-    ├── 📱 Local Training (per client)
-    │   ├── 📊 Resource monitoring (CPU/Memory)
-    │   ├── 🔄 Adaptive batch sizing
-    │   ├── 🎓 Local epoch training
-    │   └── 🧹 Memory cleanup
-    │
-    ├── 📤 Model Upload
-    │   └── Send local updates to server
-    │
-    ├── 🛡️ Trust Evaluation
-    │   ├── Cosine similarity analysis
-    │   ├── Entropy calculation
-    │   ├── Reputation scoring
-    │   └── Hybrid trust score computation
-    │
-    ├── ⚖️ Weighted Aggregation
-    │   ├── Apply trust scores as weights
-    │   └── FedAdam optimization
-    │
-    ├── 📡 Global Model Update
-    │   └── Broadcast to all clients
-    │
-    └── 📊 Evaluation & Logging
-        ├── Global model performance
-        ├── Individual client metrics
-        └── Trust score tracking
-```
-
-### 3. **Results & Analysis**
-```
-📊 Generate comprehensive metrics
-    ↓
-📈 Create visualization plots
-    ↓
-💾 Save experiment results
-    ↓
-🔍 Optional SHAP analysis
-```
-
-## API Usage Examples
-
-### Basic Federated Learning
-```python
-from TRUST_MCNet_Codebase.data.data_loader import ConfigManager, MNISTDataLoader
-from TRUST_MCNet_Codebase.models.model import MLP
-from TRUST_MCNet_Codebase.clients.client import Client
-
-# 1. Load configuration
-config = ConfigManager("TRUST_MCNet_Codebase/config/config.yaml")
-
-# 2. Prepare data
-data_loader = MNISTDataLoader(config)
-train_datasets, val_datasets, test_datasets = data_loader.create_federated_datasets(
-    num_clients=5, distribution="iid"
-)
-
-# 3. Create model
-model = MLP(
-    input_dim=config.get('model.mlp.input_dim', 784),
-    hidden_dims=config.get('model.mlp.hidden_dims', [256, 128, 64]),
-    output_dim=config.get('model.mlp.output_dim', 2)
-)
-
-# 4. Initialize client
-client = Client(
-    client_id="client_0",
-    model=model,
-    train_dataset=train_datasets[0],
-    test_dataset=test_datasets[0],
-    config=config.cfg
-)
-
-# 5. Train and evaluate
-training_metrics = client.train(local_epochs=5)
-test_metrics = client.test()
-
-print(f"Training accuracy: {training_metrics['accuracy']:.4f}")
-print(f"Test accuracy: {test_metrics['accuracy']:.4f}")
-```
-
-### Flwr Integration
-```python
-import flwr as fl
-from TRUST_MCNet_Codebase.clients.flwr_client import create_flwr_client
-from TRUST_MCNet_Codebase.server.flwr_server import create_flwr_server
-
-# Create Flwr client
-flwr_client = create_flwr_client(
-    client_id="client_0",
-    model=model,
-    train_dataset=train_dataset,
-    test_dataset=test_dataset,
-    config=config.cfg
-)
-
-# Start Flwr simulation
-fl.simulation.start_simulation(
-    client_fn=lambda cid: flwr_client,
-    num_clients=5,
-    config=fl.server.ServerConfig(num_rounds=10),
-    strategy=create_flwr_server(model, config.cfg)
-)
-```
-
-### Trust Evaluation
-```python
-from TRUST_MCNet_Codebase.trust_module.trust_evaluator import TrustEvaluator
-
-# Initialize trust evaluator
-trust_evaluator = TrustEvaluator(trust_mode='hybrid', threshold=0.7)
-
-# Evaluate client trust
-trust_score = trust_evaluator.evaluate_trust(
-    client_id="client_0",
-    model_update=client.get_weights(),
-    performance_metrics=training_metrics,
-    global_model=global_model.state_dict(),
-    round_number=1
-)
-
-print(f"Client trust score: {trust_score:.4f}")
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**1. Flwr Installation Issues**
-```bash
-# If Flwr installation fails
-pip install --upgrade pip
-pip install flwr>=1.6.0 --no-cache-dir
-
-# For M1/M2 Macs
-conda install grpcio protobuf
-pip install flwr>=1.6.0
-```
-
-**2. CUDA/GPU Issues**
-```bash
-# Check CUDA availability
-python3 -c "import torch; print(torch.cuda.is_available())"
-
-# Force CPU usage (edit config.yaml)
+**Single Epoch Training** (`config/training/default.yaml`)
+```yaml
 training:
-  device: "cpu"
+  local_epochs: 1
+  learning_rate: 0.001
+  batch_size: 32
+  enable_gpu_optimization: true
+  enable_memory_cleanup: true
+  max_retries: 3
+  retry_delay: 1.0
 ```
 
-**3. Memory Issues on IoT Devices**
+**Multi-Epoch Training** (`config/training/multi_epoch.yaml`)
+```yaml
+training:
+  local_epochs: 5
+  learning_rate: 0.01
+  batch_size: 64
+  enable_gpu_optimization: true
+  enable_memory_cleanup: true
+  gradient_clipping: 1.0
+  max_retries: 5
+  retry_delay: 2.0
+```
+
+### Ray Configurations
+
+**Local Development** (`config/ray/local.yaml`)
+```yaml
+ray:
+  num_cpus: 4
+  num_gpus: 0
+  memory_limit: "2GB"
+  object_store_memory: 1000000000
+  enable_logging: true
+  dashboard_port: 8265
+```
+
+**Distributed Setup** (`config/ray/distributed.yaml`)  
+```yaml
+ray:
+  num_cpus: 16
+  num_gpus: 2
+  memory_limit: "8GB"
+  object_store_memory: 4000000000
+  enable_logging: true
+  dashboard_port: 8265
+  cluster_mode: true
+```
+
+## 🏗️ Architecture Deep Dive
+
+### 1. Strategy Pattern for Dataset Partitioning
+
+**Registry-based extensible partitioning** (`utils/partitioning.py`):
+
+```python
+@PartitionerRegistry.register("iid")
+class IIDPartitioner(BasePartitioner):
+    def partition(self, dataset: Dataset, num_clients: int) -> Dict[int, Indices]:
+        # Uniform random distribution
+        
+@PartitionerRegistry.register("dirichlet")  
+class DirichletPartitioner(BasePartitioner):
+    def partition(self, dataset: Dataset, num_clients: int, alpha: float = 0.5) -> Dict[int, Indices]:
+        # Dirichlet distribution for non-IID data
+        
+@PartitionerRegistry.register("pathological")
+class PathologicalPartitioner(BasePartitioner):
+    def partition(self, dataset: Dataset, num_clients: int, shards_per_client: int = 2) -> Dict[int, Indices]:
+        # Pathological non-IID (few classes per client)
+```
+
+### 2. Registry Pattern for Dataset Management
+
+**Decoupled data loading** (`utils/dataset_registry.py`):
+
+```python
+@DatasetRegistry.register("mnist")
+class MNISTLoader(BaseDatasetLoader):
+    def load_dataset(self, config: DatasetConfig) -> Tuple[Dataset, Dataset]:
+        # MNIST loading with transforms
+        
+@DatasetRegistry.register("csv")
+class CSVLoader(BaseDatasetLoader):
+    def load_dataset(self, config: DatasetConfig) -> Tuple[Dataset, Dataset]:
+        # CSV loading with validation
+        
+class DataManager:
+    def __init__(self, partitioner_registry: PartitionerRegistry, dataset_registry: DatasetRegistry):
+        # Dependency injection for clean separation
+```
+
+### 3. Ray Context Management
+
+**Guaranteed resource cleanup** (`utils/ray_utils.py`):
+
+```python
+class RayContextManager:
+    def __enter__(self) -> "RayContextManager":
+        ray.init(**self.config)
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Guaranteed cleanup regardless of errors
+        self.cleanup_memory()
+        ray.shutdown()
+        
+    def cleanup_memory(self):
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+```
+
+### 4. Enhanced Client Logic
+
+**Robust error handling and retry logic** (`clients/enhanced_ray_client.py`):
+
+```python
+@ray.remote
+class EnhancedRayFlowerClient:
+    def fit_with_retry(self, parameters, config):
+        for attempt in range(self.max_retries):
+            try:
+                return self._fit_internal(parameters, config)
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                self.logger.warning(f"Fit attempt {attempt + 1} failed: {e}")
+                time.sleep(self.retry_delay)
+                
+    def _cleanup_memory(self):
+        """Memory and resource cleanup after training/evaluation"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+```
+
+### 5. Federated Metrics Logging
+
+**Comprehensive experiment tracking** (`utils/metrics_logger.py`):
+
+```python
+class FederatedMetricsLogger:
+    def __init__(self, config: MetricsConfig):
+        if config.enable_tensorboard:
+            self.tb_writer = SummaryWriter()
+        if config.enable_mlflow:
+            mlflow.start_run(run_name=config.experiment_name)
+            
+    def log_federated_metrics(self, round_num: int, metrics: Dict[str, float]):
+        # Log to all enabled backends (TensorBoard, MLflow, CSV, JSON)
+        
+    def aggregate_client_metrics(self, client_metrics: List[Dict[str, Any]]) -> Dict[str, float]:
+        # Compute federated averages, std dev, min/max across clients
+```
+
+## 🧪 Testing Framework
+
+### Comprehensive Test Suite
+
+The framework includes **4 test categories** for robustness:
+
 ```bash
-# Reduce resource limits in config.yaml
-iot_config:
-  max_memory_mb: 256
-  min_batch_size: 4
-  max_batch_size: 16
+# Run all tests
+python -m tests
+
+# Individual test categories
+python -c "from tests.test_partitioning import *; test_all_partitioners()"
+python -c "from tests.test_dataset_registry import *; test_csv_dataset_loading()"  
+python -c "from tests.test_models import *; test_mlp_forward_pass()"
+python -c "from tests.test_smoke import *; test_enhanced_simulation_smoke()"
 ```
 
-**4. Data Loading Issues**
+### Test Categories
+
+1. **Partitioning Tests** (`tests/test_partitioning.py`)
+   - All partitioner strategies (IID, Dirichlet, Pathological)
+   - Registry pattern functionality
+   - Edge cases and error handling
+
+2. **Dataset Registry Tests** (`tests/test_dataset_registry.py`)
+   - Dataset loading and validation
+   - CSV format handling
+   - Registry extensibility
+
+3. **Model Tests** (`tests/test_models.py`)
+   - Forward pass validation
+   - Gradient computation
+   - Robustness to different input shapes
+
+4. **Smoke Tests** (`tests/test_smoke.py`)
+   - End-to-end simulation workflows
+   - Configuration loading
+   - Integration testing
+
+## 🚀 Performance & Scaling
+
+### Memory Optimization
+
+- **Automatic GPU Cache Clearing**: `torch.cuda.empty_cache()` after training/evaluation
+- **Garbage Collection**: Explicit `gc.collect()` calls for memory hygiene
+- **Configurable DataLoader**: Tunable `num_workers`, `pin_memory`, `prefetch_factor`
+- **Resource Monitoring**: Built-in memory and compute profiling
+
+### Ray Parallelism
+
+- **Actor-Based Clients**: True parallelism for independent training tasks
+- **Resource Isolation**: CPU/GPU/memory limits per client
+- **Fault Tolerance**: Automatic retry logic with exponential backoff
+- **Dashboard Monitoring**: Real-time cluster resource visualization
+
+### Scalability Features
+
+```python
+# Scale to 100+ clients with distributed Ray
+python enhanced_simulation.py ray=distributed dataset.num_clients=100
+
+# Edge deployment simulation
+python enhanced_simulation.py env=iot dataset.num_clients=50 training.local_epochs=10
+
+# Memory-constrained environments
+python enhanced_simulation.py training.batch_size=16 ray.memory_limit="1GB"
+```
+
+## 🔧 Extending the Framework
+
+### Adding New Dataset Loaders
+
+1. **Create dataset config** (`config/dataset/my_dataset.yaml`):
+```yaml
+dataset:
+  name: my_dataset
+  path: "./data/my_data"
+  num_clients: 10
+  partitioning: dirichlet
+  alpha: 0.3
+```
+
+2. **Register dataset loader** (`utils/dataset_registry.py`):
+```python
+@DatasetRegistry.register("my_dataset")
+class MyDatasetLoader(BaseDatasetLoader):
+    def load_dataset(self, config: DatasetConfig) -> Tuple[Dataset, Dataset]:
+        # Implement custom loading logic
+        return train_dataset, test_dataset
+```
+
+3. **Use new dataset**:
 ```bash
-# Ensure MNIST data directory exists
-mkdir -p TRUST_MCNet_Codebase/data/MNIST
-
-# Force re-download
-# Set download: true in config.yaml
+python enhanced_simulation.py dataset=my_dataset
 ```
 
-### Performance Optimization
+### Adding New Partitioning Strategies
 
-**For Training Speed:**
-- Reduce `num_clients` and `num_rounds`
-- Use smaller batch sizes
-- Disable SHAP analysis: `shap_analysis: false`
+1. **Register partitioner** (`utils/partitioning.py`):
+```python
+@PartitionerRegistry.register("my_partitioner")
+class MyPartitioner(BasePartitioner):
+    def partition(self, dataset: Dataset, num_clients: int, **kwargs) -> Dict[int, Indices]:
+        # Implement custom partitioning logic
+        return client_indices
+```
 
-**For Memory Efficiency:**
-- Set `num_workers: 0` in data config
-- Enable `adaptive_batch_size: true`
-- Reduce model hidden dimensions
+2. **Use new partitioner**:
+```bash
+python enhanced_simulation.py dataset.partitioning=my_partitioner
+```
 
-**For Accuracy:**
-- Increase `num_rounds` (10-100)
-- Use more clients (10-50)
-- Tune learning rates in `strategy_config`
+### Adding New Trust Mechanisms
 
-## Available Make Commands
+1. **Create trust config** (`config/trust/my_trust.yaml`):
+```yaml
+trust:
+  mechanism: my_trust
+  threshold: 0.6
+  custom_param: 0.8
+```
+
+2. **Extend trust evaluator** (`trust_module/trust_evaluator.py`):
+```python
+def evaluate_trust_my_trust(self, local_weights, global_weights, **kwargs):
+    # Implement custom trust evaluation
+    return trust_score
+```
+
+## 🔍 Monitoring & Debugging
+
+### Experiment Tracking
+
+**TensorBoard Integration**:
+```bash
+# Enable TensorBoard logging
+python enhanced_simulation.py metrics.enable_tensorboard=true
+
+# View logs (in separate terminal)
+tensorboard --logdir=./outputs/tensorboard
+```
+
+**MLflow Integration**:
+```bash
+# Enable MLflow tracking
+python enhanced_simulation.py metrics.enable_mlflow=true metrics.experiment_name="my_experiment"
+
+# View MLflow UI
+mlflow ui
+```
+
+### Log Analysis
+
+**Structured Logging Output**:
+```
+2024-01-15 10:30:15 | INFO | Round 1/3 | Fit clients: 4/5 selected
+2024-01-15 10:30:16 | INFO | Client 0 | Local epochs: 3 | Loss: 0.045 | Accuracy: 0.892
+2024-01-15 10:30:17 | WARNING | Client 2 | Retry attempt 2/3 | Error: CUDA out of memory
+2024-01-15 10:30:18 | INFO | Trust Evaluation | Client 0: 0.85 | Client 1: 0.92 | Client 3: 0.78
+2024-01-15 10:30:19 | INFO | Federated Metrics | Global Loss: 0.052 | Global Accuracy: 0.887
+```
+
+**Performance Profiling**:
+```bash
+# Enable detailed profiling
+python enhanced_simulation.py training.profile_memory=true training.profile_compute=true
+
+# Monitor Ray dashboard
+open http://localhost:8265
+```
+
+## 📊 Results & Metrics
+
+### Federated Learning Metrics
+
+- **Client-Level**: Loss, accuracy, training time, memory usage per client
+- **Global Level**: Aggregated metrics across all clients per round
+- **Trust Metrics**: Trust scores, client selection ratios, anomaly detection rates
+- **System Metrics**: Ray resource utilization, memory consumption, fault rates
+
+### Export Formats
+
+- **CSV**: Detailed metrics for analysis (`metrics.save_csv=true`)
+- **JSON**: Structured data for programmatic access
+- **TensorBoard**: Interactive visualization and comparison
+- **MLflow**: Experiment management and model versioning
+
+## 🛠️ Development & Contributing
+
+### Development Setup
 
 ```bash
-# Setup and Installation
-make install          # Install basic dependencies
-make install-dev      # Install with development tools
-make install-flwr     # Install Flwr and all dependencies
+# Install with development dependencies
+pip install -e .[dev,docs,experiment]
 
-# Execution
-make run-flwr         # Run Flwr simulation (default)
-make run-flwr-custom  # Run with custom parameters
-make run-flwr-noniid  # Run with non-IID data
-make run-baseline     # Run baseline with random aggregation
-make example          # Run basic example
+# Install pre-commit hooks
+pre-commit install
 
-# Testing and Verification
-make test-flwr        # Test Flwr installation
-make test             # Run unit tests
-make lint             # Code linting
-make format           # Code formatting
+# Run code quality checks
+black . --check
+flake8 .
+mypy .
 
-# Cleanup
-make clean            # Remove generated files
+# Generate documentation
+sphinx-build -b html docs/ docs/_build/
 ```
 
-## Research Applications
+### Code Quality Standards
 
-### Anomaly Detection Scenarios
-- **IoT Sensor Networks**: Detecting faulty sensors or unusual readings
-- **Network Security**: Identifying malicious network traffic
-- **Industrial Monitoring**: Equipment failure prediction
-- **Healthcare**: Anomalous patient data detection
+- **Type Hints**: All functions must have type annotations
+- **Docstrings**: Google-style docstrings for all public methods
+- **Error Handling**: Comprehensive exception handling with logging
+- **Testing**: Minimum 80% code coverage with meaningful tests
+- **Configuration**: All behavior must be configurable via OmegaConf schemas
 
-### Trust Mechanism Research
-- **Byzantine Fault Tolerance**: Handling malicious clients
-- **Client Selection**: Optimizing participant selection
-- **Reputation Systems**: Long-term trust building
-- **Federated Robustness**: System resilience evaluation
+### Architecture Principles
 
-### IoT Optimization Studies
-- **Resource Constraint Handling**: Adaptive training strategies
-- **Communication Efficiency**: Reducing bandwidth usage
-- **Edge Computing**: Local processing optimization
-- **Battery Life**: Energy-efficient federated learning
+1. **SOLID Principles**: Single responsibility, open/closed, dependency inversion
+2. **Design Patterns**: Strategy, Registry, Context Manager, Dependency Injection
+3. **Clean Code**: Readable, maintainable, well-documented code
+4. **Error Resilience**: Graceful degradation and comprehensive error handling
+5. **Performance**: Memory optimization, resource cleanup, and scalability
 
+## 📄 License
 
-## License
+This project maintains the same license as the original TRUST-MCNet framework.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 🙏 Acknowledgments
 
-## Acknowledgments
-
-- **Flower (Flwr)**: Modern federated learning framework
-- **PyTorch**: Deep learning library
-- **MNIST Dataset**: Classic machine learning dataset
-- **Research Community**: Federated learning and trust mechanism researchers
-
-## Contact
-
-For questions, issues, or collaboration opportunities:
-
-- **Issues**: Please open an issue in the repository
-- **Email**: [Contact Email]
-- **Research Group**: [Research Group/Institution]
+- **Original TRUST-MCNet**: Foundation trust mechanisms and anomaly detection logic
+- **Flower Framework**: Modern federated learning simulation capabilities  
+- **Ray Framework**: Distributed computing and actor-based parallelism
+- **Hydra/OmegaConf**: Advanced configuration management and validation
 
 ---
 
-**🚀 Ready to start? Run `./setup_flwr.sh && make run-flwr` to begin your federated learning journey!**
+**Ready to get started?** Try the enhanced simulation:
 
----
+```bash
+cd TRUST_MCNet_Redesigned
+pip install -r requirements.txt
+python enhanced_simulation.py
+```
 
-**Note**: This is a research framework designed for federated learning experimentation with trust mechanisms and IoT device optimization. For production deployments, additional security and scalability considerations may be required.
+For questions, issues, or contributions, please follow the development guidelines above and maintain backward compatibility with existing configurations.
