@@ -259,11 +259,12 @@ class UnifiedTrustStrategy(fl.server.strategy.FedAvg):
                 logger.warning(f"Trust evaluation failed for client {client_id}: {e}")
                 trust_scores[client_id] = 0.5
         
-        # Delegate aggregation to TrustEvaluator
+        # Delegate aggregation to TrustEvaluator with enhanced quarantine logic
         try:
-            aggregated_params_torch, trust_vector = self.trust_eval.aggregate_model_updates(
+            aggregated_params_torch, trust_statistics = self.trust_eval.aggregate_model_updates(
                 client_updates=client_updates_dict,
                 client_trust_scores=trust_scores,
+                round_number=server_round,
                 trim_ratio=0.1
             )
             
@@ -283,21 +284,31 @@ class UnifiedTrustStrategy(fl.server.strategy.FedAvg):
             # Convert to Flower Parameters
             aggregated_parameters = ndarrays_to_parameters(aggregated_ndarrays)
             
-            # Create trust vector matching client order
+            # Extract trust vector and quarantine information
             trust_vector = [trust_scores[client_id] for client_id in client_ids]
+            quarantined_clients = trust_statistics.get('quarantined_clients', [])
+            surviving_clients = trust_statistics.get('surviving_clients', [])
             
         except Exception as e:
             logger.error(f"Trust evaluation failed: {e}")
             raise
         
-        # Compute trust metrics
+        # Compute enhanced trust metrics including quarantine information
         trust_metrics = self._compute_trust_metrics(client_ids, trust_scores, trust_vector)
         
-        # Add aggregation info
+        # Add quarantine-specific metrics
         trust_metrics.update({
-            'num_clients_used': len(client_ids),
-            'aggregation_method': 'trust_weighted_trimmed_mean',
-            'trust_threshold': self.trust_threshold
+            'num_clients_used': len(trust_statistics.get('trusted_survivors', [])),
+            'aggregation_method': 'trust_weighted_trimmed_mean_with_quarantine',
+            'trust_threshold': self.trust_threshold,
+            'quarantine_enabled': True,
+            'quarantined_clients': quarantined_clients,
+            'surviving_clients': surviving_clients,
+            'num_quarantined': trust_statistics.get('num_quarantined', 0),
+            'num_survivors': trust_statistics.get('num_survivors', 0),
+            'quarantine_rate': trust_statistics.get('quarantine_rate', 0.0),
+            'quarantine_stats': trust_statistics.get('quarantine_stats', {}),
+            'trim_ratio': trust_statistics.get('trim_ratio', 0.1)
         })
         
         logger.info(f"Round {server_round}: Trust aggregation completed. "

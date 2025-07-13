@@ -6,6 +6,7 @@ This module implements various trust evaluation mechanisms including:
 - Entropy-based trust evaluation  
 - Reputation-based trust scoring
 - Hybrid trust combination methods
+- Quarantine-based client filtering
 """
 
 import numpy as np
@@ -16,6 +17,8 @@ from scipy.stats import entropy, spearmanr
 from collections import defaultdict
 import logging
 import warnings
+
+from .quarantine_state import QuarantineState
 
 
 class TrustEvaluator:
@@ -31,7 +34,8 @@ class TrustEvaluator:
     
     def __init__(self, trust_mode: str = 'hybrid', threshold: float = 0.5, 
                  learning_rate: float = 0.01, use_dynamic_weights: bool = True,
-                 probe_data: Optional[torch.utils.data.DataLoader] = None):
+                 probe_data: Optional[torch.utils.data.DataLoader] = None,
+                 config: Optional[Dict[str, Any]] = None):
         """
         Initialize trust evaluator.
         
@@ -41,13 +45,18 @@ class TrustEvaluator:
             learning_rate: Learning rate for dynamic weight adaptation (η)
             use_dynamic_weights: Whether to use ρ-adaptive dynamic coefficients
             probe_data: Public probe dataset for entropy calculation
+            config: Configuration dictionary including quarantine parameters
         """
         self.trust_mode = trust_mode
         self.threshold = threshold
         self.learning_rate = learning_rate
         self.use_dynamic_weights = use_dynamic_weights
         self.probe_data = probe_data
+        self.config = config or {}
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize quarantine state manager
+        self.quarantine_state = QuarantineState(self.config)
         
         # Historical data for reputation calculation
         self.client_history = defaultdict(list)
@@ -623,41 +632,79 @@ class TrustEvaluator:
         self.logger.info(f"Selected {len(selected)} trusted clients out of {len(available_clients)} available")
         return selected
     
-    def detect_malicious_clients(self, client_trust_scores: Dict[str, List[float]],
-                                detection_window: int = 5,
-                                malicious_threshold: float = 0.3) -> List[str]:
+    def detect_malicious_clients(
+        self,
+        client_ids: List[str],
+        trust_vec: List[float],
+        round_number: int = 0
+    ) -> Tuple[List[str], List[str]]:
         """
-        Detect potentially malicious clients based on trust score patterns.
+        Enhanced malicious client detection with quarantine logic.
+        
+        Automatically excludes or heavily down-weights clients whose trust score falls 
+        below threshold τ for Q consecutive rounds, implementing the quarantine hook.
         
         Args:
-            client_trust_scores: Historical trust scores for each client
-            detection_window: Number of recent rounds to consider
-            malicious_threshold: Threshold below which client is considered malicious
+            client_ids: List of client IDs to evaluate
+            trust_vec: Corresponding trust scores for each client
+            round_number: Current training round number
             
         Returns:
-            List of potentially malicious client IDs
+            Tuple of (quarantined_clients, surviving_clients)
         """
-        malicious_clients = []
+        # Get quarantine configuration
+        quarantine_config = self.config.get('trust', {}).get('quarantine', {})
+        tau = quarantine_config.get('tau', 0.35)
+        patience = quarantine_config.get('patience', 2)
+        quarantine_rounds = quarantine_config.get('quarantine_rounds', 5)
+        enable_quarantine = quarantine_config.get('enable_quarantine', True)
         
-        for client_id, scores in client_trust_scores.items():
-            if len(scores) >= detection_window:
-                recent_scores = scores[-detection_window:]
-                avg_recent_trust = np.mean(recent_scores)
-                
-                # Check for consistently low trust
-                if avg_recent_trust < malicious_threshold:
-                    malicious_clients.append(client_id)
-                
-                # Check for sudden drop in trust
-                elif len(scores) > detection_window:
-                    previous_avg = np.mean(scores[-(detection_window*2):-detection_window])
-                    if previous_avg - avg_recent_trust > 0.4:  # Significant drop
-                        malicious_clients.append(client_id)
+        if not enable_quarantine:
+            # Quarantine disabled, return all as survivors
+            return [], client_ids
         
-        if malicious_clients:
-            self.logger.warning(f"Detected potentially malicious clients: {malicious_clients}")
+        quarantined = []
+        survivors = []
         
-        return malicious_clients
+        # Update quarantine state for each client
+        for client_id, trust_score in zip(client_ids, trust_vec):
+            self.quarantine_state.update_client_status(
+                client_id=client_id,
+                trust_score=trust_score,
+                round_number=round_number,
+                tau=tau,
+                patience=patience,
+                quarantine_rounds=quarantine_rounds
+            )
+            
+            # Check if client is currently quarantined
+            if self.quarantine_state.is_quarantined(client_id):
+                quarantined.append(client_id)
+            else:
+                survivors.append(client_id)
+        
+        # Log quarantine decisions
+        if quarantined:
+            self.logger.info(f"[Round {round_number}] Quarantined clients: {quarantined}")
+        if survivors:
+            self.logger.info(f"[Round {round_number}] Surviving clients: {survivors}")
+        
+        # Log quarantine statistics
+        stats = self.quarantine_state.get_quarantine_statistics()
+        self.logger.info(f"[Round {round_number}] Quarantine stats: "
+                        f"{stats['currently_quarantined']}/{stats['total_clients']} quarantined "
+                        f"({stats['quarantine_rate']:.1%})")
+        
+        return quarantined, survivors
+    
+    def get_quarantine_statistics(self) -> Dict[str, Any]:
+        """
+        Get current quarantine statistics for monitoring.
+        
+        Returns:
+            Dictionary containing quarantine statistics
+        """
+        return self.quarantine_state.get_quarantine_statistics()
     
     def update_trust_weights(self, cosine_weight: float, entropy_weight: float, 
                            reputation_weight: float):
@@ -720,62 +767,170 @@ class TrustEvaluator:
         stats['client_statistics'] = client_stats
         return stats
     
-    def aggregate_model_updates(self, client_updates: Dict[str, Dict[str, torch.Tensor]], 
-                            client_trust_scores: Dict[str, float],
-                            trim_ratio: float = 0.1) -> Dict[str, torch.Tensor]:
+    def aggregate_model_updates(
+        self, 
+        client_updates: Dict[str, Dict[str, torch.Tensor]], 
+        client_trust_scores: Dict[str, float],
+        round_number: int = 0,
+        trim_ratio: Optional[float] = None
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """
-        Aggregate client model updates using trust-weighted trimmed mean.
-        Implements the enhanced recommendation:
-        Drop clients with trust < τ, re-weight the rest by trust / Σtrust, 
-        then apply trimmed-mean to obtain the robust global update.
+        Enhanced aggregate client model updates with quarantine logic and trust-weighted trimmed mean.
+        
+        Implements the complete quarantine/trimming logic hook:
+        1. Detect and quarantine clients with sustained low trust
+        2. Apply trust-weighted trimmed mean on surviving clients
+        3. Return aggregated model with comprehensive trust statistics
         
         Args:
             client_updates: Dictionary mapping client IDs to their model updates
             client_trust_scores: Dictionary mapping client IDs to their trust scores
-            trim_ratio: Ratio of extreme values to trim (from each end)
+            round_number: Current training round number
+            trim_ratio: Ratio of extreme values to trim (from config if None)
             
         Returns:
-            Aggregated model update using trust-weighted trimmed mean
+            Tuple of (aggregated_model, trust_statistics)
         """
         if not client_updates:
             raise ValueError("No client updates provided for aggregation")
         
-        # Step 1: Drop clients with trust < τ (threshold)
-        trusted_clients = [client_id for client_id, trust in client_trust_scores.items() 
-                          if trust >= self.threshold]
+        # Get configuration parameters
+        aggregation_config = self.config.get('trust', {}).get('aggregation', {})
+        if trim_ratio is None:
+            trim_ratio = aggregation_config.get('trim_ratio', 0.2)
         
-        if not trusted_clients:
-            self.logger.warning(f"No clients meet trust threshold {self.threshold}. "
-                              f"Using clients with top 50% trust scores.")
-            # Use top 50% of clients if none meet threshold
-            sorted_clients = sorted(client_trust_scores.items(), key=lambda x: x[1], reverse=True)
-            num_keep = max(1, len(sorted_clients) // 2)
-            trusted_clients = [client_id for client_id, _ in sorted_clients[:num_keep]]
+        # Step 1: Apply quarantine logic to detect and exclude sustained low-trust clients
+        client_ids = list(client_trust_scores.keys())
+        trust_vec = [client_trust_scores[cid] for cid in client_ids]
         
-        # Step 2: Get updates from trusted clients
-        trusted_updates = {client_id: client_updates[client_id] 
-                          for client_id in trusted_clients if client_id in client_updates}
+        quarantined_clients, surviving_clients = self.detect_malicious_clients(
+            client_ids=client_ids,
+            trust_vec=trust_vec,
+            round_number=round_number
+        )
         
-        if not trusted_updates:
-            raise ValueError("No trusted client updates available for aggregation")
+        # Step 2: Filter client updates by survivors (quarantine filtering)
+        surviving_updates = {
+            client_id: client_updates[client_id] 
+            for client_id in surviving_clients 
+            if client_id in client_updates
+        }
         
-        # Step 3: Re-weight the rest by trust / Σtrust
-        trust_scores = {client_id: client_trust_scores[client_id] for client_id in trusted_updates}
-        sum_trust = sum(trust_scores.values())
+        if not surviving_updates:
+            # Fallback: if all clients quarantined, use best available client
+            best_client = max(client_trust_scores.items(), key=lambda x: x[1])
+            surviving_updates = {best_client[0]: client_updates[best_client[0]]}
+            surviving_clients = [best_client[0]]
+            self.logger.warning(f"All clients quarantined! Using best client: {best_client[0]} "
+                              f"(trust: {best_client[1]:.3f})")
+        
+        # Step 3: Apply traditional trust threshold filtering on survivors
+        surviving_trust_scores = {cid: client_trust_scores[cid] for cid in surviving_clients}
+        trusted_survivors = [
+            client_id for client_id, trust in surviving_trust_scores.items() 
+            if trust >= self.threshold
+        ]
+        
+        if not trusted_survivors:
+            # Use top 50% of survivors if none meet threshold
+            sorted_survivors = sorted(surviving_trust_scores.items(), key=lambda x: x[1], reverse=True)
+            num_keep = max(1, len(sorted_survivors) // 2)
+            trusted_survivors = [client_id for client_id, _ in sorted_survivors[:num_keep]]
+            self.logger.warning(f"No survivors meet trust threshold {self.threshold}. "
+                              f"Using top {num_keep} survivors.")
+        
+        # Step 4: Get final trusted updates
+        final_trusted_updates = {
+            client_id: surviving_updates[client_id] 
+            for client_id in trusted_survivors 
+            if client_id in surviving_updates
+        }
+        
+        # Step 5: Re-weight by normalized trust scores
+        final_trust_scores = {cid: surviving_trust_scores[cid] for cid in final_trusted_updates}
+        sum_trust = sum(final_trust_scores.values())
         
         if sum_trust > 0:
-            normalized_weights = {client_id: score / sum_trust 
-                                for client_id, score in trust_scores.items()}
+            normalized_weights = {
+                client_id: score / sum_trust 
+                for client_id, score in final_trust_scores.items()
+            }
         else:
-            # Equal weighting if all scores are 0
-            normalized_weights = {client_id: 1.0 / len(trusted_updates) 
-                                for client_id in trusted_updates}
+            # Equal weighting fallback
+            normalized_weights = {
+                client_id: 1.0 / len(final_trusted_updates) 
+                for client_id in final_trusted_updates
+            }
+        
+        # Step 6: Apply trust-weighted trimmed mean aggregation
+        aggregated_model = self._apply_trimmed_mean_aggregation(
+            final_trusted_updates, normalized_weights, trim_ratio
+        )
+        
+        # Step 7: Compile comprehensive trust statistics
+        trust_statistics = {
+            'round_number': round_number,
+            'total_clients': len(client_ids),
+            'quarantined_clients': quarantined_clients,
+            'surviving_clients': surviving_clients,
+            'trusted_survivors': trusted_survivors,
+            'num_quarantined': len(quarantined_clients),
+            'num_survivors': len(surviving_clients),
+            'num_final_trusted': len(final_trusted_updates),
+            'quarantine_rate': len(quarantined_clients) / len(client_ids) if client_ids else 0,
+            'trust_threshold': self.threshold,
+            'trim_ratio': trim_ratio,
+            'aggregation_weights': normalized_weights,
+            'trust_scores_distribution': {
+                'mean': np.mean(trust_vec),
+                'std': np.std(trust_vec),
+                'min': np.min(trust_vec),
+                'max': np.max(trust_vec)
+            },
+            'quarantine_stats': self.quarantine_state.get_quarantine_statistics()
+        }
+        
+        # Log aggregation summary
+        self.logger.info(
+            f"[Round {round_number}] Aggregation complete: "
+            f"{len(final_trusted_updates)}/{len(client_ids)} clients used "
+            f"({len(quarantined_clients)} quarantined, {len(surviving_clients)} survived, "
+            f"{len(final_trusted_updates)} trusted) | "
+            f"Trim ratio: {trim_ratio:.2f} | "
+            f"Trust range: [{np.min(trust_vec):.3f}, {np.max(trust_vec):.3f}]"
+        )
+        
+        return aggregated_model, trust_statistics
+    
+    def _apply_trimmed_mean_aggregation(
+        self,
+        trusted_updates: Dict[str, Dict[str, torch.Tensor]],
+        normalized_weights: Dict[str, float],
+        trim_ratio: float
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Apply trust-weighted trimmed mean aggregation to client updates.
+        
+        Args:
+            trusted_updates: Dictionary of client updates to aggregate
+            normalized_weights: Normalized trust weights for each client
+            trim_ratio: Ratio of extreme values to trim from each end
+            
+        Returns:
+            Aggregated model parameters
+        """
+        if not trusted_updates:
+            raise ValueError("No trusted updates to aggregate")
         
         # Initialize aggregated model
         first_client_id = list(trusted_updates.keys())[0]
         aggregated_model = {}
         
-        # Step 4: Apply trimmed-mean to obtain robust global update
+        # Get minimum clients for trimming from config
+        aggregation_config = self.config.get('trust', {}).get('aggregation', {})
+        min_clients_for_trimming = aggregation_config.get('min_clients_for_trimming', 4)
+        
+        # Apply trimmed-mean to each parameter
         for param_name in trusted_updates[first_client_id].keys():
             # Collect parameter updates and corresponding weights
             param_updates = []
@@ -796,7 +951,7 @@ class TrustEvaluator:
             # Apply trimmed mean for robust aggregation
             num_clients = len(param_updates)
             
-            if num_clients >= 4:  # Need sufficient samples for trimming
+            if num_clients >= min_clients_for_trimming:
                 # Calculate number of values to trim from each end
                 k = max(1, int(trim_ratio * num_clients))
                 
@@ -819,31 +974,20 @@ class TrustEvaluator:
                 trimmed_weights = trimmed_weights / trimmed_weights.sum()
                 
                 # Calculate trust-weighted mean of trimmed parameters
-                # Expand weights to match parameter dimensions
                 weight_expanded = trimmed_weights.view(-1, *([1] * len(original_shape)))
                 aggregated_param = torch.sum(trimmed_params * weight_expanded, dim=0)
                 
-                self.logger.debug(f"Parameter {param_name}: Used {len(trimmed_params)} clients "
-                                f"after trimming {k} from each end (original: {num_clients})")
+                self.logger.debug(f"Parameter {param_name}: Trimmed {k} from each end, "
+                                f"used {len(trimmed_params)}/{num_clients} clients")
             else:
                 # Use weighted mean if not enough samples for trimming
                 weight_expanded = weight_tensor.view(-1, *([1] * len(stacked_params.shape[1:])))
                 aggregated_param = torch.sum(stacked_params * weight_expanded, dim=0)
                 
                 self.logger.debug(f"Parameter {param_name}: Used weighted mean "
-                                f"(insufficient samples for trimming: {num_clients})")
+                                f"(insufficient clients for trimming: {num_clients})")
             
             aggregated_model[param_name] = aggregated_param
-        
-        self.logger.info(f"Aggregated model updates from {len(trusted_updates)} trusted clients "
-                       f"(threshold: {self.threshold:.3f}) using trust-weighted trimmed mean "
-                       f"(trim_ratio: {trim_ratio:.3f})")
-        
-        # Log trust distribution for transparency
-        trust_values = list(trust_scores.values())
-        self.logger.info(f"Trust score distribution - mean: {np.mean(trust_values):.3f}, "
-                       f"std: {np.std(trust_values):.3f}, "
-                       f"range: [{np.min(trust_values):.3f}, {np.max(trust_values):.3f}]")
         
         return aggregated_model
     
