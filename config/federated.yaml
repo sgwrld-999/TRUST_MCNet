@@ -1,0 +1,43 @@
+# Federated learning configuration for TRUST_MCNet with Flower
+# This configuration enables trust-weighted aggregation with sensible defaults
+
+server:
+  address: "0.0.0.0:8080"
+  num_rounds: 10
+  min_fit_clients: 2
+  min_eval_clients: 2
+  min_available_clients: 2
+  fraction_fit: 0.8
+  fraction_eval: 0.2
+  accept_failures: true
+
+trust:
+  trust_mode: "hybrid"  # Options: cosine, entropy, reputation, hybrid
+  threshold: 0.5
+  learning_rate: 0.01
+  use_dynamic_weights: true
+
+strategy:
+  name: "trust_weighted"
+  trim_ratio: 0.1  # 10% trimming for robust aggregation
+
+model:
+  type: "mlp"
+  mlp:
+    input_dim: 784  # For MNIST
+    hidden_dims: [128, 64]
+    output_dim: 10
+
+dataset:
+  name: "mnist"
+  batch_size: 32
+  eval_fraction: 0.2
+
+training:
+  epochs: 3
+  learning_rate: 0.01
+  optimizer: "sgd"
+
+logging:
+  level: "INFO"
+  file: "logs/server.log"

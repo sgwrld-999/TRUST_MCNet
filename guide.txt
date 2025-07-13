@@ -1,0 +1,167 @@
+### **Wiring the trust-weighted aggregator into Flower – What to do, step by step**
+
+Below is the concrete work you need to perform so that **Flower’s server really uses the trust-aware aggregation from your `trust_module` instead of the vanilla FedAvg**.
+
+---
+
+#### 1. Create a dedicated strategy subclass
+
+**File to add:** `src/strategies/trust_weighted_strategy.py`
+
+```python
+# src/strategies/trust_weighted_strategy.py
+from __future__ import annotations
+from typing import List, Tuple, Dict, Any
+
+import flwr as fl
+from flwr.common import Parameters, ndarrays_to_parameters, parameters_to_ndarrays
+from trust_module.trust_evaluator import TrustEvaluator
+
+
+class TrustWeightedStrategy(fl.server.strategy.FedAvg):
+    """FedAvg that delegates aggregation to TrustEvaluator."""
+
+    def __init__(
+        self,
+        trust_evaluator: TrustEvaluator,
+        **fedavg_kwargs,
+    ) -> None:
+        # Keep every FedAvg hyper-parameter (fraction_fit, min_fit_clients, …)
+        super().__init__(**fedavg_kwargs)
+        self.trust_eval = trust_evaluator
+
+    # -------- THE ONLY METHOD WE NEED TO OVERRIDE --------------------
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: List[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitRes]],
+        failures: List[BaseException] | None,
+    ) -> Tuple[Parameters | None, Dict[str, Any]]:
+        """Use trust_weighted trimmed mean instead of plain averaging."""
+        if failures and self.accept_failures is False:
+            return None, {}
+
+        # 1) Extract raw ndarrays and client ids
+        client_ids = [r[0].cid for r in results]
+        weights_list = [parameters_to_ndarrays(r[1].parameters) for r in results]
+        metrics_list = [r[1].metrics for r in results]  # may be empty dicts
+
+        # 2) Delegate to TrustEvaluator
+        agg_weights, trust_vec = self.trust_eval.aggregate_model_updates(
+            weights_list=weights_list,
+            client_ids=client_ids,
+            metrics_list=metrics_list,
+            round_idx=server_round,
+        )
+
+        # 3) Convert back to Flower Parameters
+        aggregated_parameters = ndarrays_to_parameters(agg_weights)
+
+        # 4) Return auxiliary metrics for tensorboard/logs
+        return aggregated_parameters, {
+            "mean_trust": float(sum(trust_vec) / len(trust_vec)),
+            "min_trust": float(min(trust_vec)),
+            "max_trust": float(max(trust_vec)),
+        }
+```
+
+> **Why:**
+>
+> * Flower’s server calls `aggregate_fit` after every round.
+> * Overriding it lets you inject the *trust-weighted trimmed mean* that lives inside `TrustEvaluator`.
+> * All other FedAvg logic (client selection, configuration broadcasts, etc.) remains untouched because we inherit from `FedAvg`.
+
+---
+
+#### 2. Expose the strategy in the package init (optional but convenient)
+
+**File to modify:** `src/strategies/__init__.py`
+
+```python
+from .trust_weighted_strategy import TrustWeightedStrategy  # noqa: F401
+
+__all__ = ["TrustWeightedStrategy"]
+```
+
+---
+
+#### 3. Instantiate the new strategy in your server launcher
+
+**File to modify:** `server/run_federated.py` (or whatever script you use to start the Flower server)
+
+```python
+import flwr as fl
+from trust_module.trust_evaluator import TrustEvaluator
+from strategies import TrustWeightedStrategy
+from utils.config_loader import load_yaml  # if you already have one
+
+cfg = load_yaml("config/trust.yaml")
+
+# 1) Build the TrustEvaluator (it keeps history across rounds)
+trust_eval = TrustEvaluator(cfg)
+
+# 2) Plug it into our custom strategy
+strategy = TrustWeightedStrategy(
+    trust_evaluator=trust_eval,
+    fraction_fit=cfg["fraction_fit"],
+    fraction_eval=cfg["fraction_eval"],
+    min_fit_clients=cfg["min_fit_clients"],
+    min_eval_clients=cfg["min_eval_clients"],
+    min_available_clients=cfg["min_available_clients"],
+    accept_failures=True,
+)
+
+# 3) Launch Flower
+fl.server.start_server(
+    server_address=cfg["server_address"],
+    config=fl.server.ServerConfig(num_rounds=cfg["num_rounds"]),
+    strategy=strategy,
+)
+```
+
+---
+
+#### 4. (If not done yet) Make sure `TrustEvaluator.aggregate_model_updates` returns what the strategy expects
+
+```python
+# inside trust_module/trust_evaluator.py
+def aggregate_model_updates(
+    self,
+    weights_list: List[List[np.ndarray]],
+    client_ids: List[str],
+    metrics_list: List[dict[str, float]],
+    round_idx: int,
+) -> Tuple[List[np.ndarray], List[float]]:
+    """
+    Returns:
+        - aggregated_weights: list of ndarrays shaped like a model’s parameters
+        - trust_vector:      per-client trust scores (same order as client_ids)
+    """
+```
+
+*You already have almost all of this, but double-check the signature.*
+
+---
+
+#### 5. Quick sanity test
+
+```bash
+# Simulate 2 dummy clients for one round
+python server/run_federated.py --num_rounds 1 &
+python client/simulate.py --cid 0 &   # whatever your existing client launcher is
+python client/simulate.py --cid 1 &
+tail -f logs/server.log | grep trust   # you should see mean_trust, min_trust, …
+```
+
+You should **no longer** see Flower’s default “Aggregator: FedAvg”, but you **should** see the extra metrics you returned (`mean_trust`, `max_trust`, etc.). If the run finishes and produces a global model, the wiring is complete.
+
+---
+
+### **Key points to remember**
+
+1. **Only `aggregate_fit` changes** – everything else stays FedAvg-compatible.
+2. **Convert NDArray ↔︎ Flower `Parameters`** – Flower always transports bytes, your TrustEvaluator wants `np.ndarray`s.
+3. **Keep the evaluator as a long-lived object** – do **not** re-instantiate it every round, otherwise you lose the history needed for dynamic trust coefficients.
+4. **Return a `(Parameters, metrics_dict)` tuple** – Flower will forward the metrics to `on_fit_end` hooks and TensorBoard logger if you enabled one.
+
+Finish these edits and Flower will truly be “trust-aware”; the rest of the tasks (quarantine hooks, SHAP alignment, etc.) can then operate on top of this wiring.

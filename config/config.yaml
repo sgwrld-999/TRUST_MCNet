@@ -30,6 +30,30 @@ federated:
   min_fit_clients: 2
   min_evaluate_clients: 2
   min_available_clients: 2
+  
+  # Flower server configuration
+  server:
+    address: "0.0.0.0:8080"
+    accept_failures: true
+    
+  # Trust-weighted strategy configuration
+  trust_weighted:
+    enable: true
+    trim_ratio: 0.1  # 10% trimming for robust aggregation
+  
+  # Adaptive trust strategy configuration
+  use_adaptive_strategy: false  # Set to true to enable adaptive thresholds
+  target_accuracy: 0.85
+  adaptation_rate: 0.05
+  max_threshold: 0.9
+  min_threshold: 0.3
+  performance_window: 5
+  adaptation_patience: 3
+  
+  # Real-time monitoring configuration
+  enable_monitoring: false  # Set to true to enable trust dashboard
+  dashboard_output_dir: "trust_dashboard"
+  dashboard_update_interval: 30  # seconds
 
 # Simulation configuration
 simulation:
@@ -38,6 +62,13 @@ simulation:
   enable_trust_evaluation: true
   trust_threshold: 0.5
   enable_metrics_aggregation: true
+  
+  # Flower client simulation settings
+  client_simulation:
+    enable: false  # Enable simple client simulation for testing
+    num_test_clients: 2
+    server_address: "localhost:8080"
+    client_bias_factor: 0.05  # Bias factor for trust evaluation testing
 
 # Logging configuration
 logging:

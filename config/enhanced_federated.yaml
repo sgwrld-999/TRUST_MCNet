@@ -1,0 +1,86 @@
+# TRUST_MCNet Enhanced Federated Learning Configuration
+# This example shows how to enable adaptive trust strategies and monitoring
+# Uses the unified trust strategy with both standard and adaptive modes
+
+defaults:
+  - base_config
+
+# Override federated learning settings for enhanced features
+federated:
+  num_rounds: 20
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 3
+  min_evaluate_clients: 3
+  min_available_clients: 3
+  
+  # Strategy configuration
+  strategy_type: "unified"  # Uses UnifiedTrustStrategy
+  
+  # Enable adaptive trust strategy
+  use_adaptive_strategy: true
+  target_accuracy: 0.85
+  adaptation_rate: 0.05
+  max_threshold: 0.9
+  min_threshold: 0.3
+  performance_window: 5
+  adaptation_patience: 3
+  
+  # Enable real-time monitoring
+  enable_monitoring: true
+  dashboard_output_dir: "trust_dashboard"
+  dashboard_update_interval: 30  # Update every 30 seconds
+  
+  # Flower server configuration
+  server:
+    address: "0.0.0.0:8080"
+    accept_failures: true
+    
+  # Trust-weighted strategy configuration
+  trust_weighted:
+    enable: true
+    trim_ratio: 0.1
+
+# Enhanced trust configuration for adaptive behavior
+trust:
+  trust_mode: "hybrid"  # Use hybrid trust evaluation
+  threshold: 0.5  # Initial threshold (will be adapted)
+  learning_rate: 0.01
+  use_dynamic_weights: true
+  
+  # Trust evaluation parameters
+  cosine_weight: 0.4
+  entropy_weight: 0.3
+  reputation_weight: 0.3
+  
+  # Reputation system settings
+  reputation:
+    initial_score: 0.5
+    decay_factor: 0.95
+    update_rate: 0.1
+
+# Enhanced simulation settings
+simulation:
+  use_enhanced_client: true
+  enable_trust_evaluation: true
+  enable_metrics_aggregation: true
+  
+  # Client simulation for testing adaptive strategy
+  client_simulation:
+    enable: true
+    num_test_clients: 5
+    server_address: "localhost:8080"
+    client_bias_factor: 0.1  # Higher bias for testing adaptation
+
+# Enhanced logging for monitoring
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  log_to_file: true
+  log_file: "logs/adaptive_trust_simulation.log"
+  
+  # Metrics logging
+  metrics:
+    enable_tensorboard: true
+    tensorboard_dir: "logs/tensorboard"
+    log_frequency: 1
