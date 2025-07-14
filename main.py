@@ -24,6 +24,8 @@ import logging
 import os
 import subprocess
 import sys
+import yaml
+import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -60,7 +62,7 @@ class DependencyManager:
             self.trust_components.update({
                 'fl': fl,
                 'yaml': yaml,
-                'np': numpy,
+                'np': np,
                 'TrustEvaluator': TrustEvaluator
             })
             self.flower_available = True
@@ -139,6 +141,17 @@ class DependencyManager:
 
 # Initialize dependency manager
 _dep_manager = DependencyManager()
+
+# Global variables for components
+FLOWER_AVAILABLE = _dep_manager.is_flower_available()
+fl = _dep_manager.get_component('fl')
+yaml = _dep_manager.get_component('yaml')
+np = _dep_manager.get_component('np')
+TrustEvaluator = _dep_manager.get_component('TrustEvaluator')
+UnifiedTrustStrategy = _dep_manager.get_component('UnifiedTrustStrategy')
+TrustWeightedStrategy = _dep_manager.get_component('TrustWeightedStrategy')
+AdaptiveTrustStrategy = _dep_manager.get_component('AdaptiveTrustStrategy')
+TrustDashboard = _dep_manager.get_component('TrustDashboard')
 
 
 def get_dependency_manager() -> DependencyManager:
