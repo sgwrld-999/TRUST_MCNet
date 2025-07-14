@@ -1,0 +1,108 @@
+# @package _global_
+# Enhanced trust configuration with SHAP alignment and adaptive LR
+
+trust:
+  name: hybrid
+  mode: hybrid
+  threshold: 0.5
+  
+  # SHAP-aligned trust parameters (Step 3-1)
+  gamma_shap: 0.25          # Weight for SHAP alignment in overall trust
+  shap_background: 256      # Background dataset size for SHAP explainer
+  shap_sample: 64           # Sample batch size for fingerprint computation
+  shap_history_window: 10   # Number of recent SHAP fingerprints to maintain
+  
+  # Adaptive learning rate parameters (Step 4-1)
+  lr:
+    enable: true                # Enable adaptive learning rates
+    base: 0.001                 # Base learning rate
+    beta: 0.5                   # Scaling factor for trust influence
+    mu: 0.5                     # Trust midpoint (neutral trust level)
+    min_lr: 0.0001              # Minimum learning rate bound
+    max_lr: 0.01                # Maximum learning rate bound
+    
+  # End-to-end explainability parameters (Step 5)
+  explainability:
+    log_shap_every: 1       # Compute SHAP fingerprint every N epochs
+    enable_shap: true       # Enable SHAP computations
+    
+  # Hybrid trust weights
+  weights:
+    cosine: 0.4
+    entropy: 0.3
+    reputation: 0.3
+    
+  # Trust evaluation parameters
+  parameters:
+    # Cosine similarity parameters
+    cosine:
+      min_similarity: 0.1
+      max_similarity: 1.0
+      
+    # Entropy parameters
+    entropy:
+      min_entropy: 0.0
+      max_entropy: 10.0
+      normalize: true
+      
+    # Reputation parameters
+    reputation:
+      decay_rate: 0.95
+      min_history: 3
+      performance_weight: 0.7
+      consistency_weight: 0.3
+      
+  # Trust update settings
+  update:
+    frequency: 1  # Update every round
+    smoothing_factor: 0.1
+    
+  # Trust-based client selection
+  selection:
+    enabled: true
+    min_trust_score: 0.3
+    max_malicious_ratio: 0.2
+    
+  # Aggregation settings (Step 5 - Quarantine/Trimming parameters)
+  aggregation:
+    trim_ratio: 0.2           # Trimming ratio for robust aggregation
+    min_clients_for_trimming: 4
+    
+  # Quarantine parameters (Step 5 - Enhanced quarantine logic)
+  quarantine:
+    enable: true              # Enable quarantine mechanism
+    tau: 0.5                  # Trust threshold for quarantine (τ)
+    patience: 3               # Rounds to wait before quarantining
+    quarantine_rounds: 5      # Number of rounds to quarantine client
+    
+# Federated learning configuration
+federated:
+  num_rounds: 10
+  num_clients: 5
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  
+# Flower framework parameters
+flower:
+  server:
+    address: "0.0.0.0:8080"
+    accept_failures: true
+  client:
+    server_address: "localhost:8080"
+    
+# Dataset configuration
+batch_size: 32
+dataset:
+  normalize: true
+  test_split: 0.2
+
+# Model configuration  
+model:
+  hidden_dims: [64, 32]
+  dropout_rate: 0.1
+  local_epochs: 1
+  learning_rate: 0.001
+  activation: "relu"

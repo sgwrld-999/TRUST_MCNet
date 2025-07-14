@@ -772,21 +772,26 @@ class TrustEvaluator:
         client_updates: Dict[str, Dict[str, torch.Tensor]], 
         client_trust_scores: Dict[str, float],
         round_number: int = 0,
-        trim_ratio: Optional[float] = None
+        trim_ratio: Optional[float] = None,
+        metrics_list: Optional[List[Dict[str, Any]]] = None
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """
-        Enhanced aggregate client model updates with quarantine logic and trust-weighted trimmed mean.
+        Enhanced aggregate client model updates with quarantine logic, trust-weighted trimmed mean,
+        and SHAP-aligned trust attribution.
         
         Implements the complete quarantine/trimming logic hook:
         1. Detect and quarantine clients with sustained low trust
-        2. Apply trust-weighted trimmed mean on surviving clients
-        3. Return aggregated model with comprehensive trust statistics
+        2. Compute SHAP alignment scores if fingerprints provided
+        3. Apply trust-weighted trimmed mean on surviving clients
+        4. Return aggregated model with comprehensive trust statistics
         
         Args:
             client_updates: Dictionary mapping client IDs to their model updates
             client_trust_scores: Dictionary mapping client IDs to their trust scores
-            round_number: Current training round number
+            round_number: Current federated learning round number
             trim_ratio: Ratio of extreme values to trim (from config if None)
+            metrics_list: List of metrics dictionaries with SHAP fingerprints (optional)
+                         Expected format: [{"client_id": str, "shap": List[float], ...}, ...]
             
         Returns:
             Tuple of (aggregated_model, trust_statistics)
@@ -796,12 +801,28 @@ class TrustEvaluator:
         
         # Get configuration parameters
         aggregation_config = self.config.get('trust', {}).get('aggregation', {})
+        trust_config = self.config.get('trust', {})
+        
         if trim_ratio is None:
             trim_ratio = aggregation_config.get('trim_ratio', 0.2)
         
-        # Step 1: Apply quarantine logic to detect and exclude sustained low-trust clients
-        client_ids = list(client_trust_scores.keys())
-        trust_vec = [client_trust_scores[cid] for cid in client_ids]
+        # Step 1: Process SHAP fingerprints and compute alignment scores
+        shap_alignment_scores = {}
+        if metrics_list is not None:
+            shap_alignment_scores = self._compute_shap_alignment_scores(metrics_list, round_number)
+            self.logger.info(f"[Round {round_number}] Computed SHAP alignment for {len(shap_alignment_scores)} clients")
+        
+        # Step 2: Enhance trust scores with SHAP alignment (if available)
+        enhanced_trust_scores = client_trust_scores.copy()
+        if shap_alignment_scores:
+            enhanced_trust_scores = self._integrate_shap_with_trust(
+                client_trust_scores, shap_alignment_scores, trust_config
+            )
+            self.logger.info(f"[Round {round_number}] Enhanced trust scores with SHAP alignment")
+        
+        # Step 3: Apply quarantine logic to detect and exclude sustained low-trust clients
+        client_ids = list(enhanced_trust_scores.keys())
+        trust_vec = [enhanced_trust_scores[cid] for cid in client_ids]
         
         quarantined_clients, surviving_clients = self.detect_malicious_clients(
             client_ids=client_ids,
@@ -809,7 +830,7 @@ class TrustEvaluator:
             round_number=round_number
         )
         
-        # Step 2: Filter client updates by survivors (quarantine filtering)
+        # Step 4: Filter client updates by survivors (quarantine filtering)
         surviving_updates = {
             client_id: client_updates[client_id] 
             for client_id in surviving_clients 
@@ -818,14 +839,14 @@ class TrustEvaluator:
         
         if not surviving_updates:
             # Fallback: if all clients quarantined, use best available client
-            best_client = max(client_trust_scores.items(), key=lambda x: x[1])
+            best_client = max(enhanced_trust_scores.items(), key=lambda x: x[1])
             surviving_updates = {best_client[0]: client_updates[best_client[0]]}
             surviving_clients = [best_client[0]]
             self.logger.warning(f"All clients quarantined! Using best client: {best_client[0]} "
                               f"(trust: {best_client[1]:.3f})")
         
-        # Step 3: Apply traditional trust threshold filtering on survivors
-        surviving_trust_scores = {cid: client_trust_scores[cid] for cid in surviving_clients}
+        # Step 5: Apply traditional trust threshold filtering on survivors
+        surviving_trust_scores = {cid: enhanced_trust_scores[cid] for cid in surviving_clients}
         trusted_survivors = [
             client_id for client_id, trust in surviving_trust_scores.items() 
             if trust >= self.threshold
@@ -839,14 +860,14 @@ class TrustEvaluator:
             self.logger.warning(f"No survivors meet trust threshold {self.threshold}. "
                               f"Using top {num_keep} survivors.")
         
-        # Step 4: Get final trusted updates
+        # Step 6: Get final trusted updates
         final_trusted_updates = {
             client_id: surviving_updates[client_id] 
             for client_id in trusted_survivors 
             if client_id in surviving_updates
         }
         
-        # Step 5: Re-weight by normalized trust scores
+        # Step 7: Re-weight by normalized trust scores
         final_trust_scores = {cid: surviving_trust_scores[cid] for cid in final_trusted_updates}
         sum_trust = sum(final_trust_scores.values())
         
@@ -862,12 +883,16 @@ class TrustEvaluator:
                 for client_id in final_trusted_updates
             }
         
-        # Step 6: Apply trust-weighted trimmed mean aggregation
+        # Step 8: Apply trust-weighted trimmed mean aggregation
         aggregated_model = self._apply_trimmed_mean_aggregation(
             final_trusted_updates, normalized_weights, trim_ratio
         )
         
-        # Step 7: Compile comprehensive trust statistics
+        # Step 9: Update global reference fingerprint if SHAP was used
+        if shap_alignment_scores:
+            self._update_global_reference_fingerprint(metrics_list, trusted_survivors)
+        
+        # Step 10: Compile comprehensive trust statistics
         trust_statistics = {
             'round_number': round_number,
             'total_clients': len(client_ids),
@@ -887,10 +912,15 @@ class TrustEvaluator:
                 'min': np.min(trust_vec),
                 'max': np.max(trust_vec)
             },
-            'quarantine_stats': self.quarantine_state.get_quarantine_statistics()
+            'quarantine_stats': self.quarantine_state.get_quarantine_statistics(),
+            'shap_enabled': len(shap_alignment_scores) > 0,
+            'shap_alignment_scores': shap_alignment_scores,
+            'original_trust_scores': client_trust_scores,
+            'enhanced_trust_scores': enhanced_trust_scores
         }
         
         # Log aggregation summary
+        shap_info = f" | SHAP: {len(shap_alignment_scores)} clients" if shap_alignment_scores else ""
         self.logger.info(
             f"[Round {round_number}] Aggregation complete: "
             f"{len(final_trusted_updates)}/{len(client_ids)} clients used "
@@ -898,6 +928,7 @@ class TrustEvaluator:
             f"{len(final_trusted_updates)} trusted) | "
             f"Trim ratio: {trim_ratio:.2f} | "
             f"Trust range: [{np.min(trust_vec):.3f}, {np.max(trust_vec):.3f}]"
+            f"{shap_info}"
         )
         
         return aggregated_model, trust_statistics
@@ -1229,3 +1260,247 @@ class TrustEvaluator:
                 analysis['overall_correlations'] = {'cosine': 0.0, 'entropy': 0.0, 'reputation': 0.0}
         
         return analysis
+    
+    def _compute_shap_alignment_scores(self, metrics_list: List[Dict[str, Any]], round_number: int) -> Dict[str, float]:
+        """
+        Compute SHAP alignment scores for clients based on their feature attribution fingerprints.
+        
+        Implements: shap_alignment_i = cos(shap_i, global_ref) with global reference tracking.
+        
+        Args:
+            metrics_list: List of metrics dictionaries containing SHAP fingerprints
+                         Expected format: [{"client_id": str, "shap": List[float], ...}, ...]
+            round_number: Current federated learning round
+            
+        Returns:
+            Dictionary mapping client IDs to their SHAP alignment scores [0, 1]
+        """
+        alignment_scores = {}
+        
+        try:
+            # Extract SHAP fingerprints from metrics
+            client_fingerprints = {}
+            for metrics in metrics_list:
+                if isinstance(metrics, dict) and "client_id" in metrics and "shap" in metrics:
+                    client_id = metrics["client_id"]
+                    shap_fingerprint = metrics["shap"]
+                    
+                    # Validate fingerprint format
+                    if isinstance(shap_fingerprint, list) and len(shap_fingerprint) > 0:
+                        # Convert to numpy array and normalize
+                        fingerprint_array = np.array(shap_fingerprint, dtype=np.float32)
+                        
+                        # Handle NaN/inf values
+                        if np.any(np.isnan(fingerprint_array)) or np.any(np.isinf(fingerprint_array)):
+                            self.logger.warning(f"Invalid SHAP fingerprint for client {client_id}, using zero vector")
+                            fingerprint_array = np.zeros_like(fingerprint_array)
+                        
+                        # L2 normalize for cosine similarity
+                        norm = np.linalg.norm(fingerprint_array)
+                        if norm > 1e-8:
+                            fingerprint_array = fingerprint_array / norm
+                        
+                        client_fingerprints[client_id] = fingerprint_array
+                    else:
+                        self.logger.warning(f"Invalid SHAP fingerprint format for client {client_id}")
+            
+            if not client_fingerprints:
+                self.logger.warning("No valid SHAP fingerprints found in metrics_list")
+                return alignment_scores
+            
+            # Initialize or update global reference fingerprint
+            global_reference = self._get_or_create_global_reference(client_fingerprints, round_number)
+            
+            # Compute alignment scores using cosine similarity
+            for client_id, fingerprint in client_fingerprints.items():
+                try:
+                    # Ensure both vectors have the same dimensionality
+                    if len(fingerprint) != len(global_reference):
+                        self.logger.warning(f"Dimension mismatch for client {client_id}: "
+                                          f"{len(fingerprint)} vs {len(global_reference)}")
+                        alignment_scores[client_id] = 0.5  # Neutral score
+                        continue
+                    
+                    # Compute cosine similarity with global reference
+                    cosine_sim = np.dot(fingerprint, global_reference)
+                    
+                    # Convert from [-1, 1] to [0, 1] range for alignment score
+                    alignment_score = (cosine_sim + 1.0) / 2.0
+                    alignment_score = max(0.0, min(1.0, alignment_score))
+                    
+                    alignment_scores[client_id] = alignment_score
+                    
+                    self.logger.debug(f"Client {client_id} SHAP alignment: {alignment_score:.4f} "
+                                    f"(cosine: {cosine_sim:.4f})")
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to compute SHAP alignment for client {client_id}: {e}")
+                    alignment_scores[client_id] = 0.5  # Neutral score on error
+            
+        except Exception as e:
+            self.logger.error(f"SHAP alignment computation failed: {e}")
+            # Return neutral scores for all clients on error
+            for metrics in metrics_list:
+                if isinstance(metrics, dict) and "client_id" in metrics:
+                    alignment_scores[metrics["client_id"]] = 0.5
+        
+        return alignment_scores
+    
+    def _get_or_create_global_reference(self, client_fingerprints: Dict[str, np.ndarray], 
+                                       round_number: int) -> np.ndarray:
+        """
+        Get or create the global reference fingerprint for SHAP alignment.
+        
+        Uses exponential moving average to maintain a stable global reference:
+        global_ref = α * current_avg + (1-α) * global_ref_prev
+        
+        Args:
+            client_fingerprints: Dictionary of normalized client fingerprints
+            round_number: Current federated learning round
+            
+        Returns:
+            Global reference fingerprint (L2 normalized)
+        """
+        if not hasattr(self, '_global_shap_reference'):
+            self._global_shap_reference = None
+        
+        # Calculate current average fingerprint from all clients
+        fingerprint_arrays = list(client_fingerprints.values())
+        current_avg = np.mean(fingerprint_arrays, axis=0)
+        
+        # Initialize global reference on first use
+        if self._global_shap_reference is None or round_number <= 1:
+            self._global_shap_reference = current_avg.copy()
+            self.logger.info(f"Initialized global SHAP reference with {len(current_avg)} features")
+        else:
+            # Update using exponential moving average
+            alpha = 0.1  # EMA smoothing factor (configurable)
+            self._global_shap_reference = (alpha * current_avg + 
+                                         (1 - alpha) * self._global_shap_reference)
+        
+        # Ensure global reference is L2 normalized
+        norm = np.linalg.norm(self._global_shap_reference)
+        if norm > 1e-8:
+            self._global_shap_reference = self._global_shap_reference / norm
+        
+        self.logger.debug(f"Updated global SHAP reference (round {round_number})")
+        return self._global_shap_reference
+    
+    def _integrate_shap_with_trust(self, original_trust_scores: Dict[str, float],
+                                  shap_alignment_scores: Dict[str, float],
+                                  trust_config: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Integrate SHAP alignment scores with original trust scores.
+        
+        Implements: enhanced_trust = γ_shap * shap_alignment + (1 - γ_shap) * original_trust
+        
+        Args:
+            original_trust_scores: Original trust scores from trust evaluation
+            shap_alignment_scores: SHAP alignment scores [0, 1]
+            trust_config: Trust configuration containing gamma_shap parameter
+            
+        Returns:
+            Enhanced trust scores integrating SHAP alignment
+        """
+        # Get SHAP integration weight from configuration
+        gamma_shap = trust_config.get('gamma_shap', 0.25)  # Default 25% weight for SHAP
+        
+        enhanced_scores = {}
+        
+        for client_id, original_trust in original_trust_scores.items():
+            if client_id in shap_alignment_scores:
+                # Combine SHAP alignment with original trust
+                shap_score = shap_alignment_scores[client_id]
+                enhanced_trust = (gamma_shap * shap_score + 
+                                (1 - gamma_shap) * original_trust)
+                enhanced_scores[client_id] = max(0.0, min(1.0, enhanced_trust))
+                
+                self.logger.debug(f"Client {client_id} trust enhancement: "
+                                f"{original_trust:.3f} -> {enhanced_scores[client_id]:.3f} "
+                                f"(SHAP: {shap_score:.3f})")
+            else:
+                # No SHAP data, use original trust score
+                enhanced_scores[client_id] = original_trust
+        
+        return enhanced_scores
+    
+    def _update_global_reference_fingerprint(self, metrics_list: List[Dict[str, Any]], 
+                                           trusted_clients: List[str]) -> None:
+        """
+        Update the global reference fingerprint using only trusted clients.
+        
+        This ensures the global reference reflects the fingerprint patterns of 
+        trusted clients, improving alignment detection for future rounds.
+        
+        Args:
+            metrics_list: List of metrics dictionaries containing SHAP fingerprints
+            trusted_clients: List of client IDs that survived trust filtering
+        """
+        try:
+            # Extract fingerprints from trusted clients only
+            trusted_fingerprints = {}
+            
+            for metrics in metrics_list:
+                if (isinstance(metrics, dict) and 
+                    "client_id" in metrics and 
+                    "shap" in metrics and
+                    metrics["client_id"] in trusted_clients):
+                    
+                    client_id = metrics["client_id"]
+                    shap_fingerprint = metrics["shap"]
+                    
+                    if isinstance(shap_fingerprint, list) and len(shap_fingerprint) > 0:
+                        fingerprint_array = np.array(shap_fingerprint, dtype=np.float32)
+                        
+                        # Validate and normalize
+                        if not (np.any(np.isnan(fingerprint_array)) or np.any(np.isinf(fingerprint_array))):
+                            norm = np.linalg.norm(fingerprint_array)
+                            if norm > 1e-8:
+                                trusted_fingerprints[client_id] = fingerprint_array / norm
+            
+            if trusted_fingerprints and hasattr(self, '_global_shap_reference'):
+                # Update global reference using trusted clients only
+                trusted_avg = np.mean(list(trusted_fingerprints.values()), axis=0)
+                
+                # Blend with existing reference (higher weight on trusted clients)
+                alpha_trusted = 0.3  # Higher learning rate for trusted updates
+                self._global_shap_reference = (alpha_trusted * trusted_avg + 
+                                             (1 - alpha_trusted) * self._global_shap_reference)
+                
+                # Re-normalize
+                norm = np.linalg.norm(self._global_shap_reference)
+                if norm > 1e-8:
+                    self._global_shap_reference = self._global_shap_reference / norm
+                
+                self.logger.debug(f"Updated global SHAP reference using {len(trusted_fingerprints)} trusted clients")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to update global reference fingerprint: {e}")
+    
+    def get_shap_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive SHAP alignment statistics for monitoring.
+        
+        Returns:
+            Dictionary containing SHAP-related statistics and insights
+        """
+        stats = {
+            'shap_enabled': hasattr(self, '_global_shap_reference') and self._global_shap_reference is not None,
+            'global_reference_dimensions': None,
+            'global_reference_norm': None
+        }
+        
+        if hasattr(self, '_global_shap_reference') and self._global_shap_reference is not None:
+            stats['global_reference_dimensions'] = len(self._global_shap_reference)
+            stats['global_reference_norm'] = float(np.linalg.norm(self._global_shap_reference))
+            
+            # Additional insights about the global reference
+            stats['global_reference_stats'] = {
+                'mean': float(np.mean(self._global_shap_reference)),
+                'std': float(np.std(self._global_shap_reference)),
+                'min': float(np.min(self._global_shap_reference)),
+                'max': float(np.max(self._global_shap_reference)),
+                'sparsity': float(np.sum(np.abs(self._global_shap_reference) < 1e-6) / len(self._global_shap_reference))
+            }
+        
+        return stats

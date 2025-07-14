@@ -20,7 +20,7 @@ import numpy as np
 from typing import Dict, List
 
 # Add src to path
-src_path = Path(__file__).parent.parent / "tests" / "src"
+src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
 try:

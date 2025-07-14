@@ -35,6 +35,7 @@ from models.model import MLP, LSTM
 from utils.data_utils import create_data_loaders, split_train_eval
 from utils.ray_utils import cleanup_training_resources, cleanup_evaluation_resources
 from trust_module.trust_evaluator import TrustEvaluator
+from explainability.explainability_pipeline import EndToEndExplainabilityPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,19 @@ class EnhancedRayFlowerClient:
         # Performance tracking
         self.performance_history = []
         self.training_metrics = {}
+        
+        # Initialize explainability pipeline (Step 5-1)
+        try:
+            explainability_output_dir = cfg.get('explainability', {}).get('output_dir', 
+                                                                         f'explainability_outputs/client_{client_id}')
+            self.explainability_pipeline = EndToEndExplainabilityPipeline(
+                config=cfg, 
+                output_dir=explainability_output_dir
+            )
+            logger.info(f"Client {client_id}: Explainability pipeline initialized")
+        except Exception as e:
+            logger.warning(f"Client {client_id}: Failed to initialize explainability pipeline: {e}")
+            self.explainability_pipeline = None
         
         # Retry configuration
         self.max_retries = 3
@@ -306,11 +320,11 @@ class EnhancedRayFlowerClient:
         config: Dict[str, Any]
     ) -> Tuple[NDArrays, int, Dict[str, Any]]:
         """
-        Train model with enhanced multi-epoch support and error handling.
+        Train model with enhanced multi-epoch support, error handling, and adaptive learning rates.
         
         Args:
             parameters: Global model parameters
-            config: Training configuration from server
+            config: Training configuration from server (may include adaptive_learning_rate)
             
         Returns:
             Tuple of (updated_parameters, num_examples, metrics)
@@ -322,15 +336,40 @@ class EnhancedRayFlowerClient:
                 # Set global parameters
                 self.set_parameters(parameters)
                 
+                # Handle adaptive learning rate from server (Step 4-2)
+                original_lr = None
+                if config.get('adaptive_lr_enabled', False) and 'adaptive_learning_rate' in config:
+                    adaptive_lr = config['adaptive_learning_rate']
+                    trust_score = config.get('trust_score', 0.5)
+                    
+                    logger.info(f"Client {self.client_id}: Using adaptive LR {adaptive_lr:.4f} "
+                               f"(trust: {trust_score:.3f})")
+                    
+                    # Store original learning rate and update optimizer
+                    original_lr = self.optimizer.param_groups[0]['lr']
+                    for param_group in self.optimizer.param_groups:
+                        param_group['lr'] = adaptive_lr
+                
                 # Extract training configuration
                 epochs = config.get('epochs', self.cfg['training']['epochs'])
                 gradient_clipping = self.cfg['training'].get('gradient_clipping', None)
+                round_number = config.get('round_number', 0)
+                
+                # Setup explainability pipeline before training (Step 5-1)
+                if self.explainability_pipeline is not None:
+                    self.explainability_pipeline.setup_pre_training(
+                        model=self.model, 
+                        train_loader=self.train_loader,
+                        client_id=self.client_id,
+                        round_number=round_number
+                    )
                 
                 # Train model
                 self.model.train()
                 total_loss = 0.0
                 total_examples = 0
                 epoch_metrics = []
+                shap_fingerprints = []  # Store SHAP fingerprints for this round
                 
                 for epoch in range(epochs):
                     epoch_start_time = time.time()
@@ -370,8 +409,8 @@ class EnhancedRayFlowerClient:
                             logger.warning(f"Client {self.client_id}: Batch {batch_idx} failed: {batch_error}")
                             continue
                     
-                    # Update learning rate scheduler
-                    if self.lr_scheduler is not None:
+                    # Update learning rate scheduler (but not if using adaptive LR from server)
+                    if self.lr_scheduler is not None and not config.get('adaptive_lr_enabled', False):
                         self.lr_scheduler.step()
                     
                     # Calculate epoch metrics
@@ -388,6 +427,18 @@ class EnhancedRayFlowerClient:
                         
                         total_loss += epoch_loss
                         total_examples = epoch_examples  # Use last epoch's count
+                        
+                        # Compute SHAP fingerprint for this epoch (Step 5-2)
+                        if self.explainability_pipeline is not None:
+                            fingerprint = self.explainability_pipeline.compute_epoch_fingerprint(
+                                model=self.model,
+                                train_loader=self.train_loader,
+                                client_id=self.client_id,
+                                round_number=round_number,
+                                epoch=epoch + 1
+                            )
+                            if fingerprint is not None:
+                                shap_fingerprints.append(fingerprint)
                         
                         logger.debug(f"Client {self.client_id}: Epoch {epoch+1}/{epochs}, "
                                    f"Loss: {avg_epoch_loss:.4f}, Time: {epoch_time:.2f}s")
@@ -416,6 +467,23 @@ class EnhancedRayFlowerClient:
                     'total_epoch_time': float(sum([em['time'] for em in epoch_metrics]) if epoch_metrics else 0.0)
                 }
                 
+                # Generate post-training explainability summary (Step 5-3)
+                if self.explainability_pipeline is not None:
+                    explainability_summary = self.explainability_pipeline.generate_post_training_summary(
+                        client_id=self.client_id,
+                        round_number=round_number,
+                        training_metrics=metrics
+                    )
+                    
+                    # Add SHAP fingerprint to metrics for server aggregation
+                    if 'final_fingerprint' in explainability_summary:
+                        metrics['shap'] = explainability_summary['final_fingerprint']
+                        metrics['shap_fingerprints_computed'] = explainability_summary.get('fingerprints_computed', 0)
+                        logger.info(f"Client {self.client_id}: Added SHAP fingerprint to metrics "
+                                   f"(dim={len(explainability_summary['final_fingerprint'])})")
+                    else:
+                        logger.warning(f"Client {self.client_id}: No SHAP fingerprint available for aggregation")
+                
                 # Store performance history (only essential metrics to avoid memory issues)
                 self.performance_history.append({
                     'timestamp': time.time(),
@@ -424,6 +492,12 @@ class EnhancedRayFlowerClient:
                     'examples': int(total_examples),
                     'time': float(training_time)
                 })
+                
+                # Restore original learning rate if adaptive LR was used (Step 4-3)
+                if original_lr is not None:
+                    for param_group in self.optimizer.param_groups:
+                        param_group['lr'] = original_lr
+                    logger.debug(f"Client {self.client_id}: Restored original LR {original_lr:.4f}")
                 
                 logger.info(f"Client {self.client_id}: Training completed in {training_time:.2f}s, "
                            f"Avg Loss: {avg_loss:.4f}, Examples: {total_examples}")

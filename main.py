@@ -25,14 +25,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Any
-
-import sys
-import os
-import argparse
-import logging
-from pathlib import Path
-import subprocess
 from typing import Dict, Any, Optional
 
 # Add src and examples to Python path
@@ -43,32 +35,83 @@ examples_path = current_dir / "examples"
 sys.path.insert(0, str(src_path))
 sys.path.insert(0, str(examples_path))
 
-# Conditional imports for Flower functionality
-try:
-    import flwr as fl
-    import yaml
-    import numpy as np
-    from trust_mcnet.trust_module.trust_evaluator import TrustEvaluator
+
+class DependencyManager:
+    """Manages conditional imports and dependency checking for better maintainability."""
     
-    # Import unified trust strategy with backward compatibility fallback
-    try:
-        from trust_mcnet.strategies.unified_trust_strategy import (
-            UnifiedTrustStrategy, 
-            TrustWeightedStrategy,  # Backward compatibility alias
-            AdaptiveTrustStrategy   # Backward compatibility alias
-        )
-        from trust_mcnet.monitoring.trust_dashboard import TrustDashboard
-    except ImportError:
-        # Fallback to legacy strategies
+    def __init__(self):
+        self.flower_available = False
+        self.trust_components = {}
+        self._initialize_dependencies()
+    
+    def _initialize_dependencies(self) -> None:
+        """Initialize dependencies with proper error handling."""
+        self._load_flower_dependencies()
+        self._load_trust_components()
+    
+    def _load_flower_dependencies(self) -> None:
+        """Load Flower and core dependencies."""
+        try:
+            import flwr as fl
+            import yaml
+            import numpy as np
+            from trust_mcnet.trust_module.trust_evaluator import TrustEvaluator
+            
+            self.trust_components.update({
+                'fl': fl,
+                'yaml': yaml,
+                'np': numpy,
+                'TrustEvaluator': TrustEvaluator
+            })
+            self.flower_available = True
+        except ImportError as e:
+            logging.warning(f"Flower dependencies not available: {e}")
+            self.flower_available = False
+    
+    def _load_trust_components(self) -> None:
+        """Load trust strategy components with fallback mechanisms."""
+        if not self.flower_available:
+            return
+            
+        # Try unified strategy first
+        try:
+            from trust_mcnet.strategies.unified_trust_strategy import (
+                UnifiedTrustStrategy, 
+                TrustWeightedStrategy,
+                AdaptiveTrustStrategy
+            )
+            from trust_mcnet.monitoring.trust_dashboard import TrustDashboard
+            
+            self.trust_components.update({
+                'UnifiedTrustStrategy': UnifiedTrustStrategy,
+                'TrustWeightedStrategy': TrustWeightedStrategy,
+                'AdaptiveTrustStrategy': AdaptiveTrustStrategy,
+                'TrustDashboard': TrustDashboard
+            })
+        except ImportError:
+            self._load_legacy_strategies()
+    
+    def _load_legacy_strategies(self) -> None:
+        """Load legacy strategy components as fallback."""
         try:
             from trust_mcnet.strategies.trust_weighted_strategy import TrustWeightedStrategy
             from trust_mcnet.strategies.adaptive_trust_strategy import AdaptiveTrustStrategy
             from trust_mcnet.monitoring.trust_dashboard import TrustDashboard
-            UnifiedTrustStrategy = None  # Mark as unavailable
-        except ImportError:
-            # Last resort: direct import
-            import importlib.util
             
+            self.trust_components.update({
+                'UnifiedTrustStrategy': None,
+                'TrustWeightedStrategy': TrustWeightedStrategy,
+                'AdaptiveTrustStrategy': AdaptiveTrustStrategy,
+                'TrustDashboard': TrustDashboard
+            })
+        except ImportError:
+            self._load_fallback_components()
+    
+    def _load_fallback_components(self) -> None:
+        """Load components via importlib as last resort."""
+        import importlib.util
+        
+        try:
             # Import TrustWeightedStrategy
             spec = importlib.util.spec_from_file_location(
                 'trust_weighted_strategy', 
@@ -76,37 +119,31 @@ try:
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            TrustWeightedStrategy = module.TrustWeightedStrategy
             
-            # Import AdaptiveTrustStrategy
-            try:
-                spec = importlib.util.spec_from_file_location(
-                    'adaptive_trust_strategy', 
-                    str(src_path / 'trust_mcnet/strategies/adaptive_trust_strategy.py')
-                )
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                AdaptiveTrustStrategy = module.AdaptiveTrustStrategy
-            except Exception:
-                AdaptiveTrustStrategy = TrustWeightedStrategy  # Fallback
+            self.trust_components['TrustWeightedStrategy'] = module.TrustWeightedStrategy
+            self.trust_components['AdaptiveTrustStrategy'] = module.TrustWeightedStrategy  # Fallback
+            self.trust_components['UnifiedTrustStrategy'] = None
+            self.trust_components['TrustDashboard'] = None
             
-            UnifiedTrustStrategy = None  # Mark as unavailable for legacy fallback
-        
-        # Import TrustDashboard
-        try:
-            spec = importlib.util.spec_from_file_location(
-                'trust_dashboard', 
-                str(src_path / 'trust_mcnet/monitoring/trust_dashboard.py')
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            TrustDashboard = module.TrustDashboard
-        except Exception:
-            TrustDashboard = None  # Monitoring not available
+        except Exception as e:
+            logging.error(f"Failed to load fallback components: {e}")
     
-    FLOWER_AVAILABLE = True
-except ImportError as e:
-    FLOWER_AVAILABLE = False
+    def get_component(self, name: str):
+        """Get a loaded component by name."""
+        return self.trust_components.get(name)
+    
+    def is_flower_available(self) -> bool:
+        """Check if Flower is available."""
+        return self.flower_available
+
+
+# Initialize dependency manager
+_dep_manager = DependencyManager()
+
+
+def get_dependency_manager() -> DependencyManager:
+    """Get the global dependency manager instance."""
+    return _dep_manager
 
 
 def setup_logging(verbose: bool = False) -> None:

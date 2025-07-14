@@ -76,12 +76,12 @@ Repository = "https://github.com/trust-mcnet/trust-mcnet-redesigned.git"
 "Bug Tracker" = "https://github.com/trust-mcnet/trust-mcnet-redesigned/issues"
 
 [project.scripts]
-trust-mcnet = "enhanced_simulation:main"
-trust-mcnet-test = "tests:run_all_tests"
+trust-mcnet = "trust_mcnet.main:main"
+trust-mcnet-simulation = "trust_mcnet.examples.start_simulation:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
+where = ["src"]
+include = ["trust_mcnet*"]
 exclude = ["tests*", "docs*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]
@@ -159,6 +159,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "timeout: marks tests with timeout (custom timeout marker)",
 ]
 
 [tool.coverage.run]

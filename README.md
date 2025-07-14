@@ -116,7 +116,7 @@ TRUST_MCNet/
 ## 🔧 Installation & Setup
 
 ### Prerequisites
-- Python 3.8+ (recommended: 3.9+)
+- Python 3.8+ (recommended: 3.11+)
 - PyTorch 1.12+ with CUDA support (optional)
 - 8GB+ RAM for medium datasets
 - CUDA-compatible GPU (optional, for acceleration)
@@ -124,20 +124,64 @@ TRUST_MCNet/
 ### Quick Installation
 
 ```bash
-# Clone and navigate to the redesigned directory
-cd TRUST_MCNet_Redesigned
+# Clone the repository
+git clone <repository-url>
+cd TRUST_MCNet
 
-# Install all dependencies (including dev tools)
+# Install all dependencies
 pip install -r requirements.txt
 
 # Alternative: Install in development mode with all extras
 pip install -e .[dev,docs,experiment]
 
 # Verify installation by running tests
-python -m tests
+pytest -q
+```
 
-# Quick smoke test
-python enhanced_simulation.py --config-name=config dataset=mnist
+## 🚀 Quick Start
+
+### Basic Usage
+
+```bash
+# Set data directory (optional)
+export MCNET_DATA=/path/to/your/data
+
+# Run basic training with ToN-IoT dataset
+python scripts/train_mcnet.py --dataset ton_iot --rounds 5
+
+# Run with different datasets
+python scripts/train_mcnet.py --dataset edge_iiot --rounds 10
+python scripts/train_mcnet.py --dataset medbiot --rounds 3
+
+# Run performance benchmark
+python scripts/benchmark.py
+```
+
+### Advanced Configuration
+
+```bash
+# Use custom configuration
+python scripts/train_mcnet.py --dataset ton_iot --rounds 5 --config config/custom_trust.yaml
+
+# With specific trust threshold
+python scripts/train_mcnet.py --dataset edge_iiot --rounds 8 --config config/trust.yaml
+```
+
+### Supported Datasets
+- **ton_iot**: Network IoT traffic anomaly detection
+- **edge_iiot**: Industrial IoT attack detection  
+- **medbiot**: Medical IoT device security
+
+### Expected Output
+```
+TRUST_MCNet Simulation Complete
+============================================================
+Dataset: ton_iot
+Rounds: 5
+Duration: 45.23 seconds
+Final Accuracy: 0.8547
+Trust Summary: {'mean_trust': 0.673, 'quarantined_clients': ['client_2']}
+============================================================
 ```
 
 ### Data Preparation
@@ -611,7 +655,95 @@ open http://localhost:8265
 - **TensorBoard**: Interactive visualization and comparison
 - **MLflow**: Experiment management and model versioning
 
-## 🛠️ Development & Contributing
+## � Troubleshooting
+
+### Common Issues
+
+#### GPU vs CPU Configuration
+```bash
+# Force CPU usage if GPU issues occur
+export CUDA_VISIBLE_DEVICES=""
+python scripts/train_mcnet.py --dataset ton_iot --rounds 5
+
+# Check GPU availability
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+```
+
+#### Ray Memory Management
+```bash
+# Adjust Ray memory limits for large datasets
+export RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE=1
+python scripts/train_mcnet.py --dataset edge_iiot --rounds 3
+
+# Clear Ray processes if stuck
+ray stop
+ray start --head
+```
+
+#### Dataset Loading Issues
+```bash
+# Verify data directory
+echo $MCNET_DATA
+ls -la $MCNET_DATA/IoT_Datasets/
+
+# Use synthetic data if real data unavailable
+python scripts/train_mcnet.py --dataset ton_iot --rounds 2
+# Synthetic data will be created automatically
+```
+
+#### Import Errors
+```bash
+# Verify installation
+pip list | grep -E "(torch|flwr|ray|omegaconf)"
+
+# Reinstall dependencies
+pip install -r requirements.txt --force-reinstall
+
+# Check Python path
+python -c "import sys; print('\n'.join(sys.path))"
+```
+
+#### Performance Issues
+```bash
+# Reduce memory usage
+python scripts/train_mcnet.py --dataset medbiot --rounds 2
+
+# Monitor resource usage
+htop  # or top on macOS
+nvidia-smi  # for GPU monitoring
+```
+
+### Error Messages
+
+#### `ModuleNotFoundError: No module named 'src.trust_mcnet'`
+**Solution**: Ensure you're running from the project root directory:
+```bash
+cd /path/to/TRUST_MCNet
+python scripts/train_mcnet.py --dataset ton_iot --rounds 5
+```
+
+#### `Ray cluster initialization failed`
+**Solution**: Reset Ray and try again:
+```bash
+ray stop
+python scripts/train_mcnet.py --dataset ton_iot --rounds 2
+```
+
+#### `CUDA out of memory`
+**Solution**: Use CPU mode or reduce batch size:
+```bash
+export CUDA_VISIBLE_DEVICES=""
+# Or edit config/trust.yaml to set batch_size: 16
+```
+
+### Getting Help
+
+1. **Check logs**: Look in `logs/` directory for detailed error messages
+2. **Run tests**: `pytest -v tests/` to verify installation
+3. **Minimal example**: Start with `--rounds 1` to test quickly
+4. **Verbose output**: Add `--log-level DEBUG` for detailed information
+
+## �🛠️ Development & Contributing
 
 ### Development Setup
 

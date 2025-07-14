@@ -261,11 +261,29 @@ class UnifiedTrustStrategy(fl.server.strategy.FedAvg):
         
         # Delegate aggregation to TrustEvaluator with enhanced quarantine logic
         try:
+            # Prepare metrics_list for SHAP integration (Step 3-2)
+            metrics_list = []
+            for i, (client_id, metrics) in enumerate(zip(client_ids, client_metrics)):
+                metrics_entry = {
+                    'client_id': client_id,
+                    'accuracy': metrics.get('accuracy', 0.5),
+                    'loss': metrics.get('train_loss', 1.0)
+                }
+                
+                # Add SHAP fingerprint if available (Step 3-2)
+                if 'shap' in metrics and isinstance(metrics['shap'], list):
+                    metrics_entry['shap'] = metrics['shap']
+                    logger.debug(f"Found SHAP fingerprint for client {client_id} (dim={len(metrics['shap'])})")
+                
+                metrics_list.append(metrics_entry)
+            
+            # Call enhanced aggregate_model_updates with SHAP support
             aggregated_params_torch, trust_statistics = self.trust_eval.aggregate_model_updates(
                 client_updates=client_updates_dict,
                 client_trust_scores=trust_scores,
                 round_number=server_round,
-                trim_ratio=0.1
+                trim_ratio=0.1,
+                metrics_list=metrics_list
             )
             
             # Convert back to NDArrays for Flower
@@ -315,6 +333,148 @@ class UnifiedTrustStrategy(fl.server.strategy.FedAvg):
                    f"Mean trust: {trust_metrics['mean_trust']:.3f}")
         
         return aggregated_parameters, trust_metrics
+
+    def configure_fit(
+        self, 
+        server_round: int, 
+        parameters: Parameters, 
+        client_manager: Any
+    ) -> List[Tuple[ClientProxy, Dict[str, Any]]]:
+        """
+        Configure the fit process for clients with adaptive learning rates based on trust scores.
+        
+        Implements adaptive learning rate scheduler:
+        lr_adapted = lr_base * (trust_score^beta + mu)
+        where beta controls sensitivity and mu provides minimum learning rate.
+        
+        Args:
+            server_round: Current round number
+            parameters: Global model parameters
+            client_manager: Client manager instance
+            
+        Returns:
+            List of (client_proxy, fit_config) tuples with adaptive learning rates
+        """
+        # Get base configuration using parent method
+        config_tuples = super().configure_fit(server_round, parameters, client_manager)
+        
+        # Check if adaptive learning rates are enabled in trust configuration
+        trust_config = getattr(self.trust_eval, 'config', {}).get('trust', {})
+        enable_adaptive_lr = trust_config.get('adaptive_lr', {}).get('enable', False)
+        
+        if not enable_adaptive_lr:
+            # Return original configuration if adaptive LR is disabled
+            return config_tuples
+        
+        # Get adaptive learning rate parameters from configuration
+        lr_config = trust_config.get('adaptive_lr', {})
+        lr_base = lr_config.get('lr_base', 0.01)
+        beta = lr_config.get('beta', 0.5)
+        mu = lr_config.get('mu', 0.1)
+        
+        self.logger.info(f"[Round {server_round}] Applying adaptive learning rates: "
+                        f"lr_base={lr_base}, beta={beta}, mu={mu}")
+        
+        # Enhance configurations with adaptive learning rates
+        enhanced_configs = []
+        
+        for client_proxy, fit_config in config_tuples:
+            client_id = client_proxy.cid
+            
+            # Get client's latest trust score (default to neutral if not available)
+            trust_score = self._get_client_trust_score(client_id, server_round)
+            
+            # Calculate adaptive learning rate: lr_adapted = lr_base * (trust_score^beta + mu)
+            trust_factor = (trust_score ** beta) + mu
+            adaptive_lr = lr_base * trust_factor
+            
+            # Ensure learning rate is within reasonable bounds
+            min_lr = lr_config.get('min_lr', 0.001)
+            max_lr = lr_config.get('max_lr', 0.1)
+            adaptive_lr = max(min_lr, min(max_lr, adaptive_lr))
+            
+            # Create enhanced configuration with adaptive learning rate
+            enhanced_config = fit_config.copy()
+            enhanced_config.update({
+                'adaptive_learning_rate': float(adaptive_lr),
+                'trust_score': float(trust_score),
+                'lr_base': float(lr_base),
+                'lr_beta': float(beta),
+                'lr_mu': float(mu),
+                'round_number': server_round,
+                'adaptive_lr_enabled': True
+            })
+            
+            enhanced_configs.append((client_proxy, enhanced_config))
+            
+            self.logger.debug(f"Client {client_id}: trust={trust_score:.3f} -> "
+                            f"adaptive_lr={adaptive_lr:.4f} (factor={trust_factor:.3f})")
+        
+        self.logger.info(f"[Round {server_round}] Configured {len(enhanced_configs)} clients "
+                        f"with adaptive learning rates")
+        
+        return enhanced_configs
+    
+    def _get_client_trust_score(self, client_id: str, server_round: int) -> float:
+        """
+        Get the latest trust score for a client from trust evaluator history.
+        
+        Args:
+            client_id: Client identifier
+            server_round: Current round number
+            
+        Returns:
+            Latest trust score for the client (default 0.5 if not available)
+        """
+        try:
+            # Check if trust evaluator has client history
+            if hasattr(self.trust_eval, 'client_history') and client_id in self.trust_eval.client_history:
+                client_history = self.trust_eval.client_history[client_id]
+                if client_history:
+                    # Get most recent performance for trust calculation
+                    latest_entry = client_history[-1]
+                    
+                    # Use a simple reputation-based trust score if available
+                    if 'accuracy' in latest_entry:
+                        # Simple trust based on accuracy (can be enhanced)
+                        accuracy = latest_entry['accuracy']
+                        trust_score = min(1.0, max(0.0, accuracy))
+                        return trust_score
+            
+            # Check trust metric histories for hybrid trust calculation
+            if (hasattr(self.trust_eval, 'cosine_history') and 
+                client_id in self.trust_eval.cosine_history and
+                self.trust_eval.cosine_history[client_id]):
+                
+                # Get latest hybrid trust score components
+                latest_cosine = self.trust_eval.cosine_history[client_id][-1]
+                
+                latest_entropy = 0.5
+                if (hasattr(self.trust_eval, 'entropy_history') and 
+                    client_id in self.trust_eval.entropy_history and
+                    self.trust_eval.entropy_history[client_id]):
+                    latest_entropy = self.trust_eval.entropy_history[client_id][-1]
+                
+                latest_reputation = 0.5
+                if (hasattr(self.trust_eval, 'reputation_history') and 
+                    client_id in self.trust_eval.reputation_history and
+                    self.trust_eval.reputation_history[client_id]):
+                    latest_reputation = self.trust_eval.reputation_history[client_id][-1]
+                
+                # Calculate weighted trust score using current weights
+                weights = getattr(self.trust_eval, 'weights', {'cosine': 1/3, 'entropy': 1/3, 'reputation': 1/3})
+                trust_score = (weights['cosine'] * latest_cosine +
+                             weights['entropy'] * latest_entropy +
+                             weights['reputation'] * latest_reputation)
+                
+                return max(0.0, min(1.0, trust_score))
+            
+            # Default neutral trust score for new or unknown clients
+            return 0.5
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to get trust score for client {client_id}: {e}")
+            return 0.5  # Neutral trust on error
 
     def _collect_round_metrics(
         self, 
@@ -513,6 +673,148 @@ class UnifiedTrustStrategy(fl.server.strategy.FedAvg):
                 'window_size': self.performance_window
             }
         }
+
+    def configure_fit(
+        self, 
+        server_round: int, 
+        parameters: Parameters, 
+        client_manager: Any
+    ) -> List[Tuple[ClientProxy, Dict[str, Any]]]:
+        """
+        Configure the fit process for clients with adaptive learning rates based on trust scores.
+        
+        Implements adaptive learning rate scheduler:
+        lr_adapted = lr_base * (trust_score^beta + mu)
+        where beta controls sensitivity and mu provides minimum learning rate.
+        
+        Args:
+            server_round: Current round number
+            parameters: Global model parameters
+            client_manager: Client manager instance
+            
+        Returns:
+            List of (client_proxy, fit_config) tuples with adaptive learning rates
+        """
+        # Get base configuration using parent method
+        config_tuples = super().configure_fit(server_round, parameters, client_manager)
+        
+        # Check if adaptive learning rates are enabled in trust configuration
+        trust_config = getattr(self.trust_eval, 'config', {}).get('trust', {})
+        lr_config = trust_config.get('lr', {})
+        enable_adaptive_lr = len(lr_config) > 0  # Enable if LR config exists
+        
+        if not enable_adaptive_lr:
+            # Return original configuration if adaptive LR is disabled
+            return config_tuples
+        
+        # Get adaptive learning rate parameters from configuration
+        lr_base = lr_config.get('base', 0.001)
+        beta = lr_config.get('beta', 0.5)
+        mu = lr_config.get('mu', 0.5)
+        
+        logger.info(f"[Round {server_round}] Applying adaptive learning rates: "
+                   f"lr_base={lr_base}, beta={beta}, mu={mu}")
+        
+        # Enhance configurations with adaptive learning rates
+        enhanced_configs = []
+        
+        for client_proxy, fit_config in config_tuples:
+            client_id = client_proxy.cid
+            
+            # Get client's latest trust score (default to neutral if not available)
+            trust_score = self._get_client_trust_score(client_id, server_round)
+            
+            # Calculate adaptive learning rate: lr_adapted = lr_base * (trust_score^beta + mu)
+            trust_factor = (trust_score ** beta) + mu
+            adaptive_lr = lr_base * trust_factor
+            
+            # Ensure learning rate is within reasonable bounds
+            min_lr = lr_config.get('min_lr', 0.0001)
+            max_lr = lr_config.get('max_lr', 0.01)
+            adaptive_lr = max(min_lr, min(max_lr, adaptive_lr))
+            
+            # Create enhanced configuration with adaptive learning rate
+            enhanced_config = fit_config.copy()
+            enhanced_config.update({
+                'adaptive_learning_rate': float(adaptive_lr),
+                'trust_score': float(trust_score),
+                'lr_base': float(lr_base),
+                'lr_beta': float(beta),
+                'lr_mu': float(mu),
+                'round_number': server_round,
+                'adaptive_lr_enabled': True
+            })
+            
+            enhanced_configs.append((client_proxy, enhanced_config))
+            
+            logger.debug(f"Client {client_id}: trust={trust_score:.3f} -> "
+                        f"adaptive_lr={adaptive_lr:.4f} (factor={trust_factor:.3f})")
+        
+        logger.info(f"[Round {server_round}] Configured {len(enhanced_configs)} clients "
+                   f"with adaptive learning rates")
+        
+        return enhanced_configs
+    
+    def _get_client_trust_score(self, client_id: str, server_round: int) -> float:
+        """
+        Get the latest trust score for a client from trust evaluator history.
+        
+        Args:
+            client_id: Client identifier
+            server_round: Current round number
+            
+        Returns:
+            Latest trust score for the client (default 0.5 if not available)
+        """
+        try:
+            # Check if trust evaluator has client history
+            if hasattr(self.trust_eval, 'client_history') and client_id in self.trust_eval.client_history:
+                client_history = self.trust_eval.client_history[client_id]
+                if client_history:
+                    # Get most recent performance for trust calculation
+                    latest_entry = client_history[-1]
+                    
+                    # Use a simple reputation-based trust score if available
+                    if 'accuracy' in latest_entry:
+                        # Simple trust based on accuracy (can be enhanced)
+                        accuracy = latest_entry['accuracy']
+                        trust_score = min(1.0, max(0.0, accuracy))
+                        return trust_score
+            
+            # Check trust metric histories for hybrid trust calculation
+            if (hasattr(self.trust_eval, 'cosine_history') and 
+                client_id in self.trust_eval.cosine_history and
+                self.trust_eval.cosine_history[client_id]):
+                
+                # Get latest hybrid trust score components
+                latest_cosine = self.trust_eval.cosine_history[client_id][-1]
+                
+                latest_entropy = 0.5
+                if (hasattr(self.trust_eval, 'entropy_history') and 
+                    client_id in self.trust_eval.entropy_history and
+                    self.trust_eval.entropy_history[client_id]):
+                    latest_entropy = self.trust_eval.entropy_history[client_id][-1]
+                
+                latest_reputation = 0.5
+                if (hasattr(self.trust_eval, 'reputation_history') and 
+                    client_id in self.trust_eval.reputation_history and
+                    self.trust_eval.reputation_history[client_id]):
+                    latest_reputation = self.trust_eval.reputation_history[client_id][-1]
+                
+                # Calculate weighted trust score using current weights
+                weights = getattr(self.trust_eval, 'weights', {'cosine': 1/3, 'entropy': 1/3, 'reputation': 1/3})
+                trust_score = (weights['cosine'] * latest_cosine +
+                             weights['entropy'] * latest_entropy +
+                             weights['reputation'] * latest_reputation)
+                
+                return max(0.0, min(1.0, trust_score))
+            
+            # Default neutral trust score for new or unknown clients
+            return 0.5
+            
+        except Exception as e:
+            logger.warning(f"Failed to get trust score for client {client_id}: {e}")
+            return 0.5  # Neutral trust on error
 
     def __repr__(self) -> str:
         """String representation for debugging."""
