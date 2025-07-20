@@ -1504,3 +1504,301 @@ class TrustEvaluator:
             }
         
         return stats
+    
+    # ========================= DYNAMIC THRESHOLD MECHANISM =========================
+    
+    def __init_dynamic_threshold_system(self):
+        """Initialize dynamic threshold system components."""
+        if not hasattr(self, '_dynamic_threshold_initialized'):
+            # Dynamic threshold configuration
+            self.min_threshold = self.config.get('min_trust_threshold', 0.1)
+            self.max_threshold = self.config.get('max_trust_threshold', 0.9)
+            self.min_trusted_clients = self.config.get('min_trusted_clients', 2)
+            self.target_trusted_ratio = self.config.get('target_trusted_ratio', 0.6)
+            
+            # History tracking for dynamic adaptation
+            self.threshold_history = []
+            self.trust_scores_history = []
+            self.performance_history = []
+            self.round_number_history = []
+            
+            # Threshold calculation weights
+            self.percentile_weight = self.config.get('threshold_percentile_weight', 0.4)
+            self.statistical_weight = self.config.get('threshold_statistical_weight', 0.3)
+            self.adaptive_weight = self.config.get('threshold_adaptive_weight', 0.3)
+            
+            self._dynamic_threshold_initialized = True
+            self.logger.info("Dynamic threshold system initialized")
+    
+    def calculate_dynamic_threshold(self, trust_scores: Dict[str, float], round_number: int, 
+                                   global_accuracy: Optional[float] = None) -> float:
+        """
+        Calculate dynamic trust threshold based on current trust distribution and performance.
+        
+        Args:
+            trust_scores: Current trust scores for all clients
+            round_number: Current federated learning round
+            global_accuracy: Current global model accuracy for performance tracking
+            
+        Returns:
+            Dynamic trust threshold
+        """
+        # Initialize dynamic threshold system if not already done
+        self.__init_dynamic_threshold_system()
+        
+        if not trust_scores:
+            self.logger.warning("No trust scores provided - using minimum threshold")
+            return self.min_threshold
+        
+        scores = list(trust_scores.values())
+        num_clients = len(scores)
+        
+        self.logger.info(f"Round {round_number}: Calculating dynamic threshold for {num_clients} clients")
+        
+        # Method 1: Percentile-based threshold
+        threshold_percentile = self._calculate_percentile_threshold(scores, round_number)
+        
+        # Method 2: Statistical-based threshold  
+        threshold_statistical = self._calculate_statistical_threshold(scores, round_number)
+        
+        # Method 3: Adaptive threshold based on history
+        threshold_adaptive = self._calculate_adaptive_threshold(scores, round_number)
+        
+        # Combine methods with round-aware weights
+        if round_number <= 3:
+            # Early rounds: be more lenient, focus on percentile and statistical
+            dynamic_threshold = (
+                0.5 * threshold_percentile + 
+                0.4 * threshold_statistical + 
+                0.1 * threshold_adaptive
+            )
+            self.logger.debug(f"Round {round_number}: Using early-round threshold calculation")
+        elif round_number <= 10:
+            # Middle rounds: balanced approach
+            dynamic_threshold = (
+                self.percentile_weight * threshold_percentile + 
+                self.statistical_weight * threshold_statistical + 
+                self.adaptive_weight * threshold_adaptive
+            )
+            self.logger.debug(f"Round {round_number}: Using balanced threshold calculation")
+        else:
+            # Later rounds: more sophisticated, history-based
+            dynamic_threshold = (
+                0.2 * threshold_percentile + 
+                0.3 * threshold_statistical + 
+                0.5 * threshold_adaptive
+            )
+            self.logger.debug(f"Round {round_number}: Using advanced threshold calculation")
+        
+        # Apply hard constraints
+        dynamic_threshold = max(self.min_threshold, min(dynamic_threshold, self.max_threshold))
+        
+        # Ensure minimum number of trusted clients
+        dynamic_threshold = self._ensure_minimum_trusted_clients(scores, dynamic_threshold)
+        
+        # Store for history
+        self.threshold_history.append(dynamic_threshold)
+        self.trust_scores_history.append(scores.copy())
+        self.round_number_history.append(round_number)
+        if global_accuracy is not None:
+            self.performance_history.append(global_accuracy)
+        
+        # Log detailed threshold calculation
+        trusted_count = sum(1 for score in scores if score >= dynamic_threshold)
+        trusted_ratio = trusted_count / num_clients
+        
+        self.logger.info(f"Round {round_number} Dynamic Threshold Calculation:")
+        self.logger.info(f"  - Percentile threshold: {threshold_percentile:.3f}")
+        self.logger.info(f"  - Statistical threshold: {threshold_statistical:.3f}")
+        self.logger.info(f"  - Adaptive threshold: {threshold_adaptive:.3f}")
+        self.logger.info(f"  - Final dynamic threshold: {dynamic_threshold:.3f}")
+        self.logger.info(f"  - Trusted clients: {trusted_count}/{num_clients} ({trusted_ratio:.1%})")
+        self.logger.info(f"  - Trust score range: [{min(scores):.3f}, {max(scores):.3f}]")
+        
+        # Update the threshold for current operations
+        self.threshold = dynamic_threshold
+        
+        return dynamic_threshold
+    
+    def _calculate_percentile_threshold(self, scores: List[float], round_number: int) -> float:
+        """Calculate threshold based on score percentiles."""
+        scores_sorted = sorted(scores, reverse=True)
+        
+        # Adaptive percentile based on round number
+        if round_number <= 2:
+            percentile = 0.8  # Top 80% in early rounds
+        elif round_number <= 5:
+            percentile = 0.7  # Top 70% in middle rounds
+        elif round_number <= 10:
+            percentile = self.target_trusted_ratio  # Target ratio
+        else:
+            # Later rounds: more selective
+            percentile = max(0.5, self.target_trusted_ratio - 0.1)
+        
+        index = int(len(scores_sorted) * percentile)
+        index = max(0, min(index, len(scores_sorted) - 1))
+        
+        return scores_sorted[index]
+    
+    def _calculate_statistical_threshold(self, scores: List[float], round_number: int) -> float:
+        """Calculate threshold based on statistical properties."""
+        mean_score = np.mean(scores)
+        std_score = np.std(scores)
+        
+        # Adaptive statistical threshold
+        if round_number <= 3:
+            # Early rounds: mean - 0.5 * std (more inclusive)
+            statistical_threshold = mean_score - 0.5 * std_score
+        elif round_number <= 10:
+            # Middle rounds: mean (50th percentile)
+            statistical_threshold = mean_score
+        else:
+            # Later rounds: mean + 0.2 * std (more selective)
+            statistical_threshold = mean_score + 0.2 * std_score
+        
+        return max(0.0, statistical_threshold)
+    
+    def _calculate_adaptive_threshold(self, scores: List[float], round_number: int) -> float:
+        """Calculate adaptive threshold based on historical performance."""
+        if len(self.threshold_history) < 2:
+            return np.mean(scores)
+        
+        # Analyze threshold effectiveness over recent rounds
+        recent_window = min(3, len(self.threshold_history))
+        recent_thresholds = self.threshold_history[-recent_window:]
+        recent_scores = self.trust_scores_history[-recent_window:]
+        
+        # Calculate trusted ratios for recent rounds
+        trusted_ratios = []
+        for threshold, round_scores in zip(recent_thresholds, recent_scores):
+            trusted_count = sum(1 for score in round_scores if score >= threshold)
+            trusted_ratios.append(trusted_count / len(round_scores))
+        
+        avg_trusted_ratio = np.mean(trusted_ratios)
+        current_mean = np.mean(scores)
+        current_std = np.std(scores)
+        
+        # Analyze performance trend if available
+        performance_trend = 0.0
+        if len(self.performance_history) >= 3:
+            recent_performance = self.performance_history[-3:]
+            performance_trend = recent_performance[-1] - recent_performance[0]
+        
+        # Adjust based on recent performance and trusted ratio
+        if avg_trusted_ratio > 0.8:
+            # Too inclusive - increase threshold
+            adaptive_threshold = current_mean + 0.3 * current_std
+            self.logger.debug("Adaptive: Too many trusted clients - increasing threshold")
+        elif avg_trusted_ratio < 0.3:
+            # Too exclusive - decrease threshold
+            adaptive_threshold = current_mean - 0.4 * current_std
+            self.logger.debug("Adaptive: Too few trusted clients - decreasing threshold")
+        elif performance_trend > 0.05:
+            # Performance improving - can be more selective
+            adaptive_threshold = current_mean + 0.1 * current_std
+            self.logger.debug("Adaptive: Performance improving - slightly increasing threshold")
+        elif performance_trend < -0.05:
+            # Performance degrading - be more inclusive
+            adaptive_threshold = current_mean - 0.2 * current_std
+            self.logger.debug("Adaptive: Performance degrading - decreasing threshold")
+        else:
+            # Stable performance - maintain current level
+            adaptive_threshold = current_mean
+            self.logger.debug("Adaptive: Stable performance - maintaining current level")
+        
+        return max(0.0, adaptive_threshold)
+    
+    def _ensure_minimum_trusted_clients(self, scores: List[float], threshold: float) -> float:
+        """Ensure at least minimum number of clients will be trusted."""
+        scores_sorted = sorted(scores, reverse=True)
+        trusted_count = sum(1 for score in scores if score >= threshold)
+        
+        if trusted_count < self.min_trusted_clients:
+            if len(scores_sorted) >= self.min_trusted_clients:
+                # Adjust threshold to ensure minimum trusted clients
+                adjusted_threshold = scores_sorted[self.min_trusted_clients - 1]
+                self.logger.info(f"Adjusted threshold from {threshold:.3f} to {adjusted_threshold:.3f} "
+                               f"to ensure {self.min_trusted_clients} trusted clients")
+                return adjusted_threshold
+            else:
+                # Not enough clients total
+                self.logger.warning(f"Only {len(scores)} clients total, cannot ensure {self.min_trusted_clients} trusted clients")
+                return self.min_threshold
+        
+        return threshold
+    
+    def get_trusted_clients_dynamic(self, trust_scores: Dict[str, float], round_number: int,
+                                   global_accuracy: Optional[float] = None) -> Tuple[Dict[str, float], float]:
+        """
+        Get trusted clients using dynamic threshold calculation.
+        
+        Args:
+            trust_scores: Trust scores for all clients
+            round_number: Current federated learning round
+            global_accuracy: Current global model accuracy
+            
+        Returns:
+            Tuple of (trusted_clients_dict, dynamic_threshold_used)
+        """
+        # Calculate dynamic threshold
+        dynamic_threshold = self.calculate_dynamic_threshold(trust_scores, round_number, global_accuracy)
+        
+        # Filter trusted clients
+        trusted_clients = {
+            client_id: score for client_id, score in trust_scores.items() 
+            if score >= dynamic_threshold
+        }
+        
+        self.logger.info(f"Round {round_number}: {len(trusted_clients)}/{len(trust_scores)} clients trusted "
+                        f"(dynamic threshold: {dynamic_threshold:.3f})")
+        
+        # Log trust distribution for analysis
+        scores = list(trust_scores.values())
+        self.logger.info(f"Trust scores - Mean: {np.mean(scores):.3f}, Std: {np.std(scores):.3f}, "
+                        f"Min: {np.min(scores):.3f}, Max: {np.max(scores):.3f}")
+        
+        # Fallback if no clients are trusted (shouldn't happen with dynamic threshold, but safety)
+        if not trusted_clients:
+            self.logger.warning("Dynamic threshold resulted in no trusted clients - using fallback")
+            # Use top 50% of clients as fallback
+            sorted_clients = sorted(trust_scores.items(), key=lambda x: x[1], reverse=True)
+            fallback_count = max(1, len(sorted_clients) // 2)
+            trusted_clients = dict(sorted_clients[:fallback_count])
+            self.logger.info(f"Fallback: Selected top {len(trusted_clients)} clients")
+        
+        return trusted_clients, dynamic_threshold
+    
+    def update_performance_history(self, global_accuracy: float, round_number: int):
+        """Update performance history for adaptive threshold calculation."""
+        self.performance_history.append(global_accuracy)
+        
+        # Keep only recent history
+        max_history = 15
+        if len(self.performance_history) > max_history:
+            self.performance_history = self.performance_history[-max_history:]
+            
+        self.logger.debug(f"Round {round_number}: Updated performance history with accuracy {global_accuracy:.3f}")
+    
+    def get_threshold_statistics(self) -> Dict[str, Any]:
+        """Get statistics about dynamic threshold behavior."""
+        if not hasattr(self, '_dynamic_threshold_initialized') or not self.threshold_history:
+            return {'dynamic_threshold_enabled': False}
+        
+        return {
+            'dynamic_threshold_enabled': True,
+            'current_threshold': self.threshold,
+            'threshold_history': self.threshold_history[-10:],  # Last 10 rounds
+            'threshold_stats': {
+                'mean': np.mean(self.threshold_history),
+                'std': np.std(self.threshold_history),
+                'min': np.min(self.threshold_history),
+                'max': np.max(self.threshold_history),
+                'trend': self.threshold_history[-1] - self.threshold_history[0] if len(self.threshold_history) > 1 else 0
+            },
+            'configuration': {
+                'min_threshold': self.min_threshold,
+                'max_threshold': self.max_threshold,
+                'min_trusted_clients': self.min_trusted_clients,
+                'target_trusted_ratio': self.target_trusted_ratio
+            }
+        }

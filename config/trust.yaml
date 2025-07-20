@@ -6,6 +6,17 @@ trust:
   mode: hybrid
   threshold: 0.5
   
+  # Dynamic threshold configuration (NEW)
+  dynamic_threshold:
+    enabled: true                    # Enable dynamic threshold calculation
+    min_trust_threshold: 0.1         # Minimum allowed threshold
+    max_trust_threshold: 0.9         # Maximum allowed threshold
+    min_trusted_clients: 2           # Minimum number of clients to trust
+    target_trusted_ratio: 0.6        # Target ratio of trusted clients
+    threshold_percentile_weight: 0.4 # Weight for percentile-based threshold
+    threshold_statistical_weight: 0.3 # Weight for statistical threshold
+    threshold_adaptive_weight: 0.3   # Weight for adaptive threshold
+  
   # SHAP-aligned trust parameters (Step 3-1)
   gamma_shap: 0.25          # Weight for SHAP alignment in overall trust
   shap_background: 256      # Background dataset size for SHAP explainer

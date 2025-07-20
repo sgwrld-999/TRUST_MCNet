@@ -1,0 +1,169 @@
+# @package _global_
+# Fixed IoT dataset configuration for TRUST-MCNet
+# This configuration addresses the accuracy discrepancy issue
+
+dataset:
+  name: iot_general
+  path: "./data/IoT_Datasets"
+  
+  # Dataset selection strategy
+  selection_strategy: "merged"  # Merge all datasets for proper distribution
+  
+  # All dataset files to merge
+  dataset_files: 
+    - "CIC_IOMT_2024_100_Samples.csv"
+    - "CIC_IoT_2023_100_Samples.csv" 
+    - "Edge_IIoT_100_Samples.csv"
+    - "IoT_23_100_Samples.csv"
+    - "MedBIoT_100_Samples.csv"
+  
+  # Client configuration - FIXED for better accuracy
+  num_clients: 5
+  eval_fraction: 0.2
+  batch_size: 32
+  val_ratio: 0.1
+  
+  # Data preprocessing - ENHANCED
+  preprocessing:
+    # Feature selection strategy
+    feature_selection: "manual"  # Use manual selection to remove problematic features
+    
+    # EXPANDED exclude_columns - Remove features that don't generalize
+    exclude_columns:
+      - "timestamp"        # Time-specific data
+      - "unique_id"        # Identifier columns
+      - "orig_host"        # Source IP addresses (don't generalize)
+      - "resp_host"        # Destination IP addresses (don't generalize)
+      - "orig_port"        # Specific port numbers (may not generalize)
+      - "resp_port"        # Specific port numbers (may not generalize)
+      - "missed_bytes"     # Often sparse/unreliable
+      - "tunnel_parents"   # Network-specific metadata
+      - "history"          # Connection state history (network-specific)
+      - "Label"            # Target column (handled separately)
+      - "Sub_Label"        # Detailed label (optional)
+    
+    # Keep only behavioral/statistical features that generalize well
+    keep_features:
+      - "duration"         # Connection duration (behavioral)
+      - "orig_bytes"       # Bytes sent (statistical)
+      - "resp_bytes"       # Bytes received (statistical)
+      - "orig_pkts"        # Packets sent (statistical)
+      - "resp_pkts"        # Packets received (statistical)
+      - "orig_ip_bytes"    # IP bytes sent (statistical)
+      - "resp_ip_bytes"    # IP bytes received (statistical)
+      - "local_orig"       # Local/remote indicator (behavioral)
+      - "local_resp"       # Local/remote indicator (behavioral)
+    
+    # Feature encoding for categorical variables (if any remain)
+    categorical_encoding:
+      - "protocol"
+      - "service"
+      - "conn_state"
+    
+    # Data cleaning - ENHANCED
+    handle_missing_values: true
+    missing_value_strategy: "median"  # Use median for robustness
+    
+    # Normalization/Standardization - CRITICAL for multi-dataset training
+    standardization: true
+    normalization_method: "standard"  # Z-score normalization
+    
+    # Feature scaling
+    scale_features: true
+    remove_outliers: true           # Remove outliers for better generalization
+    outlier_method: "iqr"           # Use IQR method
+  
+  # Label configuration for binary anomaly detection
+  label_config:
+    target_column: "Label"
+    
+    # EXPANDED normal labels to handle all datasets
+    normal_labels:
+      - "BenignTraffic"
+      - "Benign"
+      - "Normal"
+      - "Mirai_BenignTraffic"
+      - "benign"
+      - "BENIGN"
+    
+    # EXPANDED anomaly labels to handle all datasets  
+    anomaly_labels:
+      - "DDoS"
+      - "BruteForce"
+      - "Recon"
+      - "Mirai_DDoS"
+      - "Ransomware" 
+      - "Malicious"
+      - "bashlite"
+      - "Mirai"
+      - "web"
+      - "Attack"
+      - "ATTACK"
+      - "anomaly"
+      - "ANOMALY"
+    
+    # Auto-detect strategy: if label not in normal_labels, treat as anomaly
+    auto_anomaly_detection: true
+    
+    # Class balancing - IMPORTANT for consistent training
+    balance_classes: true
+    balancing_method: "undersample"  # Conservative approach
+  
+  # Data partitioning for federated learning - FIXED
+  partitioning: "dirichlet"    # Use Dirichlet for realistic but not pathological distribution
+  dirichlet_alpha: 1.5        # Higher alpha = more IID-like (1.5 is good balance)
+  
+  # Alternative: Use IID for debugging
+  # partitioning: "iid"
+  
+  # Data validation - ENHANCED
+  validation:
+    min_samples_per_client: 15        # Ensure sufficient samples
+    max_samples_per_client: 50000
+    min_features: 5
+    required_columns:
+      - "Label"
+    
+    # Quality checks
+    check_data_quality: true
+    max_missing_percentage: 0.2       # Stricter missing data tolerance
+    min_class_samples: 10             # Ensure each client can learn both classes
+    min_classes_per_client: 2         # CRITICAL: Each client must have both classes
+  
+  # Transforms for network traffic data - ENHANCED
+  transforms:
+    # Convert categorical to numerical
+    encode_categorical: true
+    
+    # Log transform for highly skewed numerical features
+    log_transform_features:
+      - "orig_bytes"
+      - "resp_bytes"
+      - "duration"
+    
+    # Feature engineering - Keep simple for stability
+    create_derived_features: true
+    derived_features:
+      - "bytes_ratio"          # orig_bytes / resp_bytes
+      - "packet_size_avg"      # total_bytes / total_packets
+    
+    # Normalization
+    normalize: true
+    mean: [0.0]  # Will be computed automatically
+    std: [1.0]   # Will be computed automatically
+
+# TRUST mechanism adjustments for fixed data distribution
+trust:
+  trust_mode: "hybrid"
+  threshold: 0.3              # LOWERED from 0.5 to accept more client updates
+  learning_rate: 0.01
+  use_dynamic_weights: true
+  
+# Federated learning adjustments
+federated:
+  num_rounds: 10              # More rounds to see improvement
+  fraction_fit: 0.8
+  fraction_evaluate: 0.2
+  min_fit_clients: 3          # Ensure minimum participation
+  min_evaluate_clients: 2
+  min_available_clients: 3

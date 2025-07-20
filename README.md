@@ -68,50 +68,6 @@ TRUST_MCNet/
 ├── requirements.txt                 # Dependencies
 └── README.md                        # This file
 ```
-│   │   └── custom_csv.yaml
-│   ├── env/                         # Environment configurations
-│   │   ├── local.yaml
-│   │   ├── iot.yaml
-│   │   └── gpu.yaml
-│   ├── strategy/                    # FL strategy configurations
-│   │   ├── fedavg.yaml
-│   │   ├── fedadam.yaml
-│   │   └── fedprox.yaml
-│   ├── trust/                       # Trust mechanism configurations
-│   │   ├── hybrid.yaml
-│   │   ├── cosine.yaml
-│   │   ├── entropy.yaml
-│   │   └── reputation.yaml
-│   └── model/                       # Model architecture configurations
-│       ├── mlp.yaml
-│       └── lstm.yaml
-├── clients/                          # Client implementations
-│   ├── enhanced_ray_client.py       # Enhanced client with error handling
-│   └── ray_flwr_client.py          # Original Ray Flower client
-├── utils/                           # Utility modules
-│   ├── partitioning.py             # Strategy pattern for data partitioning
-│   ├── dataset_registry.py         # Registry pattern for dataset management
-│   ├── ray_utils.py                # Ray context managers and utilities
-│   ├── metrics_logger.py           # Federated metrics logging system
-│   └── data_utils.py               # Core data utilities
-├── models/                          # Model definitions
-│   └── model.py                    # MLP and LSTM implementations
-├── trust_module/                    # Trust evaluation system
-│   └── trust_evaluator.py         # Multi-modal trust mechanisms
-├── tests/                           # Comprehensive test suite
-│   ├── __init__.py                 # Test runner and utilities
-│   ├── test_partitioning.py        # Partitioner strategy tests
-│   ├── test_dataset_registry.py    # Dataset registry tests
-│   ├── test_models.py              # Model architecture tests
-│   └── test_smoke.py               # End-to-end smoke tests
-├── enhanced_simulation.py          # New orchestrator with all patterns
-├── simulation.py                    # Original simulation logic
-├── train.py                         # Hydra entry point
-├── examples.py                      # Usage examples and demos
-├── requirements.txt                 # Production dependencies
-├── pyproject.toml                   # Modern packaging and dev tools
-└── README.md                        # This documentation
-```
 
 ## 🔧 Installation & Setup
 

@@ -40,8 +40,15 @@ dataset:
     exclude_columns:
       - "timestamp"
       - "unique_id"
-      - "Label"        # Target column
-      - "Sub_Label"    # Detailed label (optional)
+      - "orig_host"      # Network addresses don't generalize
+      - "resp_host"      # Network addresses don't generalize  
+      - "orig_port"      # Specific ports may not generalize
+      - "resp_port"      # Specific ports may not generalize
+      - "missed_bytes"   # Often sparse/unreliable
+      - "tunnel_parents" # Network-specific metadata
+      - "history"        # Connection state history
+      - "Label"          # Target column (handled separately)
+      - "Sub_Label"      # Detailed label (optional)
     
     # Feature encoding for categorical variables
     categorical_encoding:
@@ -74,6 +81,25 @@ dataset:
     # Data cleaning
     handle_missing_values: true
     missing_value_strategy: "median"  # median, mean, drop, forward_fill
+    
+    # Automatic redundant feature removal
+    auto_remove_redundant: true
+    remove_timestamps: true
+    remove_addresses: true
+    
+    # Adaptive feature selection
+    adaptive_feature_selection: true
+    feature_selection:
+      remove_metadata: true
+      remove_timestamps: true
+      remove_addresses: true
+      remove_constant: true
+      remove_high_cardinality: true
+      high_cardinality_threshold: 0.9
+      remove_correlated: true
+      variance_filtering: true
+      variance_threshold: 0.01
+      max_features: 15  # Limit to top 15 features
     
     # Normalization/Standardization
     standardization: true
@@ -115,8 +141,8 @@ dataset:
     balancing_method: "undersample"  # oversample, undersample, smote
   
   # Data partitioning for federated learning
-  partitioning: "iid"  # iid, dirichlet, pathological
-  dirichlet_alpha: 0.5
+  partitioning: "dirichlet"  # Use Dirichlet for realistic non-IID but not pathological
+  dirichlet_alpha: 1.0      # Higher alpha = more IID, lower = more non-IID
   
   # IoT-specific settings
   iot_config:
