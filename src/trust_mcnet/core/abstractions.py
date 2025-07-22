@@ -28,7 +28,7 @@ from .types import (
     TrustScore,
     ClientConfig,
     ExperimentConfig,
-    DatasetInfo,
+    DatasetI7nfo,
     PartitionConfig,
     ExperimentPhase
 )
