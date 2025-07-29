@@ -1,62 +1,61 @@
 """
 Trust evaluation module for TRUST-MCNet federated learning framework.
 
-This module implements various trust evaluation mechanisms including:
+This module implements the Dynamic Trust-Weighted Aggregation (DTWA) algorithm
+that combines multiple trust signals with dynamic thresholds and robust aggregation.
+
+Key components:
 - Cosine similarity-based trust
 - Entropy-based trust evaluation  
 - Reputation-based trust scoring
-- Hybrid trust combination methods
-- Quarantine-based client filtering
+- Bayesian-Mirror dynamic weights
+- Dynamic thresholding
+- Robust aggregation with temperature-controlled softmax and trimmed-mean
 """
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from typing import Dict, List, Any, Union, Tuple, Optional
-from scipy.stats import entropy, spearmanr
+from scipy.stats import spearmanr
 from collections import defaultdict
 import logging
-import warnings
-
-from .quarantine_state import QuarantineState
 
 
 class TrustEvaluator:
     """
-    Comprehensive trust evaluation system for federated learning clients.
+    Dynamic Trust-Weighted Aggregation (DTWA) for federated learning clients.
     
-    Supports multiple trust evaluation modes:
-    - 'cosine': Cosine similarity between model updates
-    - 'entropy': Entropy-based trust evaluation
-    - 'reputation': Historical performance-based reputation
-    - 'hybrid': Combination of multiple trust metrics
+    This implementation combines three trust signals:
+    - Cosine similarity between client update and population average
+    - Prediction entropy on a probe dataset
+    - Historical reputation based on accuracy
+    
+    Features:
+    - Dynamic thresholding via percentile-based cutoff
+    - Bayesian-Mirror weight adaptation based on correlation with accuracy
+    - Robust aggregation using temperature-softmax and trimmed mean
     """
     
-    def __init__(self, trust_mode: str = 'hybrid', threshold: float = 0.5, 
-                 learning_rate: float = 0.01, use_dynamic_weights: bool = True,
+    def __init__(self,
+                 threshold: float = 0.5, 
+                 learning_rate: float = 0.01,
                  probe_data: Optional[torch.utils.data.DataLoader] = None,
                  config: Optional[Dict[str, Any]] = None):
         """
         Initialize trust evaluator.
         
         Args:
-            trust_mode: Trust evaluation method ('cosine', 'entropy', 'reputation', 'hybrid')
-            threshold: Trust threshold for client selection
+            threshold: Initial trust threshold for client selection
             learning_rate: Learning rate for dynamic weight adaptation (η)
-            use_dynamic_weights: Whether to use ρ-adaptive dynamic coefficients
             probe_data: Public probe dataset for entropy calculation
-            config: Configuration dictionary including quarantine parameters
+            config: Configuration dictionary
         """
-        self.trust_mode = trust_mode
         self.threshold = threshold
         self.learning_rate = learning_rate
-        self.use_dynamic_weights = use_dynamic_weights
         self.probe_data = probe_data
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
-        
-        # Initialize quarantine state manager
-        self.quarantine_state = QuarantineState(self.config)
         
         # Historical data for reputation calculation
         self.client_history = defaultdict(list)
@@ -64,29 +63,31 @@ class TrustEvaluator:
         
         # Raw metric histories for correlation analysis
         self.cosine_history = defaultdict(list)
-        self.entropy_history = defaultdict(list) 
+        self.entropy_history = defaultdict(list)
         self.reputation_history = defaultdict(list)
         self.accuracy_delta_history = defaultdict(list)
         
         # Dynamic coefficients (θ = [α, β, γ])
-        self.theta = np.array([0.4, 0.3, 0.3])  # Initial weights
+        self.theta = np.array([0.4, 0.3, 0.3])  # Initial weights [cosine, entropy, reputation]
         self.theta_history = [self.theta.copy()]
         
-        # Static weights for backward compatibility
-        self.weights = {
-            'cosine': self.theta[0],
-            'entropy': self.theta[1],
-            'reputation': self.theta[2]
-        }
+        # Bayesian-Mirror Trust parameters from algorithm specification
+        self.forgetting_factor = self.config.get('trust', {}).get('forgetting_factor', 0.2)  # λ
+        self.eta0 = self.config.get('trust', {}).get('eta0', 0.10)  # Mirror descent base LR
+        self.temp0 = self.config.get('trust', {}).get('temp0', 1.0)  # Initial temperature
+        self.temp_min = self.config.get('trust', {}).get('temp_min', 0.3)  # Minimum temperature
+        self.temp_decay = self.config.get('trust', {}).get('temp_decay', 0.1)  # Temperature decay rate
+        self.percentile_p = self.config.get('trust', {}).get('percentile_p', 40)  # Dynamic threshold percentile
+        
+        # Current round tracking for temperature and learning rate decay
+        self.current_round = 0
     
     def evaluate_trust(self, client_id: str, model_update: Dict[str, torch.Tensor],
                       performance_metrics: Dict[str, float], 
                       global_model: Dict[str, torch.Tensor],
                       round_number: int,
                       global_update_avg: Optional[Dict[str, torch.Tensor]] = None,
-                      client_model: Optional[torch.nn.Module] = None,
-                      participation_rate: float = 1.0,
-                      flags: int = 0) -> float:
+                      client_model: Optional[torch.nn.Module] = None) -> float:
         """
         Evaluate trust score for a client based on their model update.
         
@@ -98,114 +99,76 @@ class TrustEvaluator:
             round_number: Current federated learning round
             global_update_avg: Average of all client updates for cosine calculation
             client_model: Client's model for entropy calculation on probe data
-            participation_rate: Client's participation rate in recent rounds
-            flags: Number of anomaly flags for this client
             
         Returns:
             Trust score between 0 and 1
         """
-        if self.trust_mode == 'cosine':
-            return self._cosine_trust(model_update, global_model, global_update_avg)
-        elif self.trust_mode == 'entropy':
-            return self._entropy_trust(model_update, client_model)
-        elif self.trust_mode == 'reputation':
-            return self._reputation_trust(client_id, performance_metrics, round_number, 
-                                        participation_rate, flags)
-        elif self.trust_mode == 'hybrid':
-            return self._hybrid_trust(client_id, model_update, performance_metrics, 
-                                    global_model, round_number, global_update_avg,
-                                    client_model, participation_rate, flags)
-        else:
-            raise ValueError(f"Unknown trust mode: {self.trust_mode}")
+        return self._hybrid_trust(client_id, model_update, performance_metrics, 
+                                  global_model, round_number, global_update_avg,
+                                  client_model)
     
-    def _cosine_trust(self, model_update: Dict[str, torch.Tensor], 
-                     global_model: Dict[str, torch.Tensor],
-                     global_update_avg: Optional[Dict[str, torch.Tensor]] = None) -> float:
+    def _cosine_trust(self,
+                      model_update: Dict[str, torch.Tensor],
+                      global_update_avg: Dict[str, torch.Tensor]) -> float:
         """
         Calculate trust based on cosine similarity between client update and average global update.
-        Implements: cos_i^t = cos(Δw_i^t, Δw̄^t)
+        Implements: cosᵢ = cosine(Δwᵢᵗ, Δw̄ᵗ)
         
         Args:
-            model_update: Client's model parameter updates (Δw_i^t)
-            global_model: Global model parameters (for computing deltas)
-            global_update_avg: Average of all client updates (Δw̄^t)
+            model_update: Client's model parameter updates (Δwᵢᵗ)
+            global_update_avg: Average of all client updates (Δw̄ᵗ)
             
         Returns:
-            Cosine similarity-based trust score
+            Cosine similarity-based trust score (0 to 1)
         """
         try:
-            # Calculate client update delta (Δw_i^t)
-            if len(self.global_update_history) > 0:
-                prev_global = self.global_update_history[-1]
-                client_delta = {}
-                for key in model_update.keys():
-                    if key in prev_global:
-                        client_delta[key] = model_update[key] - prev_global[key]
-                    else:
-                        client_delta[key] = model_update[key]
-            else:
-                # First round, treat the model update itself as delta
-                client_delta = model_update
-            
-            # Use provided global average update (Δw̄^t) or fallback to global model
-            if global_update_avg is not None and len(global_update_avg) > 0:
-                global_delta = global_update_avg
-            else:
-                # Fallback: use global model as reference
-                if len(self.global_update_history) > 0:
-                    prev_global = self.global_update_history[-1]
-                    global_delta = {}
-                    for key in global_model.keys():
-                        if key in prev_global:
-                            global_delta[key] = global_model[key] - prev_global[key]
-                        else:
-                            global_delta[key] = global_model[key]
-                else:
-                    global_delta = global_model
+            # Direct computation of deltas from the provided inputs
+            # No mixing of model states and update states
+            client_delta = {k: model_update[k] for k in model_update}
+            global_delta = {k: global_update_avg[k] for k in global_update_avg}
             
             # Flatten parameter deltas for cosine similarity calculation
-            client_params_list = []
-            global_params_list = []
+            client_params = []
+            global_params = []
             
-            for key in client_delta.keys():
+            for key in client_delta:
                 if key in global_delta:
-                    client_params_list.append(client_delta[key].flatten())
-                    global_params_list.append(global_delta[key].flatten())
+                    client_params.append(client_delta[key].flatten())
+                    global_params.append(global_delta[key].flatten())
             
-            if not client_params_list:
-                self.logger.warning("No matching parameters for cosine similarity calculation")
+            if not client_params:
+                self.logger.warning("No matching parameters for cosine similarity")
                 return 0.5  # Neutral trust score
             
             # Concatenate all parameter deltas
-            client_params = torch.cat(client_params_list, dim=0)
-            global_params = torch.cat(global_params_list, dim=0)
+            client_vec = torch.cat(client_params)
+            global_vec = torch.cat(global_params)
             
             # Handle edge cases
-            if torch.norm(client_params) == 0 or torch.norm(global_params) == 0:
-                self.logger.debug("Zero norm detected in cosine similarity calculation")
+            if torch.norm(client_vec) == 0 or torch.norm(global_vec) == 0:
                 return 0.5  # Neutral trust for zero updates
             
             # Calculate cosine similarity: cos(Δw_i^t, Δw̄^t)
-            cosine_sim = F.cosine_similarity(client_params.unsqueeze(0), 
-                                           global_params.unsqueeze(0), dim=1)
+            cos_sim = F.cosine_similarity(client_vec.unsqueeze(0),
+                                          global_vec.unsqueeze(0),
+                                          dim=1).item()
             
             # Convert from [-1, 1] to [0, 1] range
-            trust_score = (cosine_sim.item() + 1) / 2
+            score = (cos_sim + 1) / 2
+            trust_score = float(np.clip(score, 0.0, 1.0))
             
-            # Ensure bounds
-            trust_score = max(0.0, min(1.0, trust_score))
-            
-            self.logger.debug(f"Cosine similarity: {cosine_sim.item():.4f}, "
+            self.logger.debug(f"Cosine similarity: {cos_sim:.4f}, "
                             f"Trust score: {trust_score:.4f}")
             
             return trust_score
             
         except Exception as e:
-            self.logger.warning(f"Cosine trust calculation failed: {e}")
+            self.logger.warning(f"Cosine trust failed: {e}")
             return 0.5  # Neutral trust on error
     
-    def _entropy_trust(self, model_update: Dict[str, torch.Tensor], 
-                      client_model: Optional[torch.nn.Module] = None) -> float:
+    def _entropy_trust(self,
+                       model_update: Dict[str, torch.Tensor],
+                       client_model: Optional[torch.nn.Module] = None) -> float:
         """
         Calculate trust based on entropy of predictions on a public probe set.
         Implements: ent_i^t = E_x[-∑ p̂_i log p̂_i] on a public probe set
@@ -218,51 +181,34 @@ class TrustEvaluator:
             Entropy-based trust score
         """
         try:
-            if self.probe_data is not None and client_model is not None:
+            if self.probe_data and client_model:
                 # Use public probe set for entropy calculation (preferred method)
                 entropies = []
                 client_model.eval()
                 
                 with torch.no_grad():
-                    for batch_idx, (data, _) in enumerate(self.probe_data):
-                        if batch_idx >= 10:  # Use more batches for better estimation
+                    for idx, (x, _) in enumerate(self.probe_data):
+                        if idx >= 10:
                             break
-                        
-                        try:
-                            # Get predictions from client model: p̂_i
-                            outputs = client_model(data)
-                            
-                            # Apply softmax to get probability distribution
-                            probs = F.softmax(outputs, dim=1)
-                            
-                            # Calculate entropy for each sample: -∑ p̂_i log p̂_i
-                            # Add small epsilon for numerical stability
-                            epsilon = 1e-10
-                            sample_entropies = -torch.sum(probs * torch.log(probs + epsilon), dim=1)
-                            entropies.extend(sample_entropies.cpu().numpy())
-                            
-                        except Exception as e:
-                            self.logger.debug(f"Error processing batch {batch_idx}: {e}")
-                            continue
+                        out = client_model(x)
+                        probs = F.softmax(out, dim=1)
+                        e = -torch.sum(probs * torch.log(probs + 1e-10), dim=1)
+                        entropies.extend(e.cpu().numpy())
                 
                 if entropies:
-                    # Calculate expected entropy: E_x[-∑ p̂_i log p̂_i]
-                    expected_entropy = np.mean(entropies)
+                    # Calculate expected entropy
+                    E = float(np.mean(entropies))
                     
-                    # Normalize to [0, 1] range
-                    # Higher entropy indicates more uncertainty/diversity (can be good or bad)
-                    # We'll use a sigmoid-like transformation for gradual trust mapping
-                    max_entropy = np.log(10)  # Assume max 10 classes
-                    normalized_entropy = expected_entropy / max_entropy
+                    # Normalize using max possible entropy (log of class count)
+                    Hmax = np.log(probs.shape[1])
+                    norm = E / Hmax
                     
-                    # Transform to trust score: moderate entropy = higher trust
-                    # Peak trust at entropy around 50% of maximum
-                    optimal_entropy = 0.5
-                    entropy_deviation = abs(normalized_entropy - optimal_entropy)
-                    trust_score = max(0.0, 1.0 - 2 * entropy_deviation)
+                    # Transform to trust score: lower entropy = higher trust
+                    # This rewards more confident models which is appropriate for classification
+                    trust_score = float(np.clip(1.0 - norm, 0.0, 1.0))
                     
-                    self.logger.debug(f"Probe entropy: {expected_entropy:.4f}, "
-                                    f"normalized: {normalized_entropy:.4f}, "
+                    self.logger.debug(f"Probe entropy: {E:.4f}, "
+                                    f"normalized: {norm:.4f}, "
                                     f"trust: {trust_score:.4f}")
                     
                     return trust_score
@@ -270,59 +216,61 @@ class TrustEvaluator:
                     self.logger.warning("No valid entropy calculations from probe data")
             
             # Fallback: Use parameter distribution entropy
-            entropies = []
+            ent_list = []
             
-            for param_name, param_tensor in model_update.items():
+            for tensor in model_update.values():
                 try:
                     # Convert to numpy and flatten
-                    param_flat = param_tensor.detach().cpu().numpy().flatten()
+                    arr = tensor.detach().cpu().numpy().flatten()
                     
                     # Skip if parameter is empty or constant
-                    if len(param_flat) == 0 or np.std(param_flat) < 1e-8:
+                    if arr.size == 0 or np.std(arr) < 1e-8:
                         continue
                     
                     # Create histogram for entropy calculation with adaptive bins
-                    n_bins = min(50, max(10, len(param_flat) // 20))
-                    hist, _ = np.histogram(param_flat, bins=n_bins, density=True)
+                    bins = min(50, max(10, arr.size // 20))
+                    hist, _ = np.histogram(arr, bins=bins, density=True)
                     
                     # Normalize histogram and add small epsilon
-                    hist = hist / (hist.sum() + 1e-10)
-                    hist = hist + 1e-10
+                    hist = hist / (hist.sum() + 1e-10) + 1e-10
                     
                     # Calculate entropy: -∑ p log p
-                    param_entropy = -np.sum(hist * np.log(hist))
-                    entropies.append(param_entropy)
+                    ent_list.append(-np.sum(hist * np.log(hist)))
                     
                 except Exception as e:
-                    self.logger.debug(f"Error calculating entropy for {param_name}: {e}")
+                    self.logger.debug(f"Error calculating entropy: {e}")
                     continue
             
-            if not entropies:
+            if not ent_list:
                 self.logger.warning("No valid parameter entropies calculated")
                 return 0.5  # Neutral trust
             
             # Average entropy across all parameters
-            avg_entropy = np.mean(entropies)
+            avg_ent = float(np.mean(ent_list))
             
-            # Normalize entropy to [0, 1] range
-            # Higher entropy indicates more diverse parameters (generally positive)
-            max_param_entropy = np.log(50)  # Assume max 50 bins
-            trust_score = min(1.0, avg_entropy / max_param_entropy)
+            # Normalize and convert to trust score
+            # Use actual bin count for proper normalization
+            bins = min(50, max(10, len(model_update) // 20))
+            max_ent = np.log(bins)  # Max entropy for the actual bins used
             
-            # Ensure bounds
-            trust_score = max(0.0, min(1.0, trust_score))
+            # Lower entropy = higher trust for classification tasks
+            norm = min(avg_ent / max_ent, 1.0)  # Cap at 1.0
+            trust_score = float(1.0 - norm)
             
-            self.logger.debug(f"Parameter entropy: {avg_entropy:.4f}, trust: {trust_score:.4f}")
+            self.logger.debug(f"Parameter entropy: {avg_ent:.4f}, trust: {trust_score:.4f}")
             
             return trust_score
             
         except Exception as e:
-            self.logger.warning(f"Entropy trust calculation failed: {e}")
+            self.logger.warning(f"Entropy trust failed: {e}")
             return 0.5  # Neutral trust on error
     
-    def _reputation_trust(self, client_id: str, performance_metrics: Dict[str, float],
-                         round_number: int, participation_rate: float = 1.0, 
-                         flags: int = 0) -> float:
+    def _reputation_trust(self,
+                          client_id: str,
+                          performance_metrics: Dict[str, float],
+                          round_number: int,
+                          participation_rate: float = 1.0,
+                          flags: int = 0) -> float:
         """
         Calculate trust based on historical performance using EMA.
         Implements: rep_i^t = EMA(ΔAcc_i, participation, flags)
@@ -337,21 +285,21 @@ class TrustEvaluator:
         Returns:
             Reputation-based trust score
         """
-        # Store current performance
-        current_accuracy = performance_metrics.get('accuracy', 0.0)
+        # Get current accuracy and calculate delta
+        curr_acc = performance_metrics.get('accuracy', 0.0)
+        hist = self.client_history[client_id]
         
-        # Calculate accuracy delta (ΔAcc_i)
-        if client_id in self.client_history and self.client_history[client_id]:
-            prev_accuracy = self.client_history[client_id][-1]['accuracy']
-            accuracy_delta = current_accuracy - prev_accuracy
+        if hist:
+            prev = hist[-1]['accuracy']
+            delta = curr_acc - prev
         else:
-            accuracy_delta = current_accuracy  # First round
+            delta = curr_acc  # First round
         
         # Store current performance
-        self.client_history[client_id].append({
+        hist.append({
             'round': round_number,
-            'accuracy': current_accuracy,
-            'accuracy_delta': accuracy_delta,
+            'accuracy': curr_acc,
+            'accuracy_delta': delta,
             'loss': performance_metrics.get('loss', 1.0),
             'f1_score': performance_metrics.get('f1_score', 0.0),
             'participation': participation_rate,
@@ -359,39 +307,39 @@ class TrustEvaluator:
         })
         
         # Store accuracy delta for correlation analysis
-        self.accuracy_delta_history[client_id].append(accuracy_delta)
+        self.accuracy_delta_history[client_id].append(delta)
         
-        history = self.client_history[client_id]
-        
-        if len(history) < 2:
+        if len(hist) < 2:
             # Not enough history, use current performance with participation penalty
-            base_score = current_accuracy * participation_rate
-            flag_penalty = min(0.1 * flags, 0.5)  # Max 50% penalty
-            return max(0.0, min(1.0, base_score - flag_penalty))
+            base = curr_acc * participation_rate
+            pen = min(0.1 * flags, 0.5)  # Max 50% penalty
+            return float(np.clip(base - pen, 0.0, 1.0))
         
-        # EMA calculation for accuracy deltas
+        # EMA calculation for accuracy deltas with proper forward recursion
         alpha = 0.3  # EMA smoothing factor
-        ema_acc_delta = accuracy_delta
         
-        for i in range(len(history) - 2, -1, -1):
-            prev_delta = history[i]['accuracy_delta']
-            ema_acc_delta = alpha * prev_delta + (1 - alpha) * ema_acc_delta
+        # Get previous EMA or initialize with first delta
+        if not hasattr(self, '_client_ema_state'):
+            self._client_ema_state = {}
+            
+        if client_id not in self._client_ema_state:
+            self._client_ema_state[client_id] = delta
         
-        # Normalize EMA to [0, 1] range
-        # Assume accuracy deltas typically range from -0.2 to +0.2
-        normalized_ema = (ema_acc_delta + 0.2) / 0.4
-        normalized_ema = max(0.0, min(1.0, normalized_ema))
+        # Update EMA using correct formula: new_ema = alpha * current_value + (1-alpha) * prev_ema
+        prev_ema = self._client_ema_state[client_id]
+        ema = alpha * delta + (1 - alpha) * prev_ema
         
-        # Apply participation rate multiplier
-        participation_score = normalized_ema * participation_rate
+        # Store updated EMA for next round
+        self._client_ema_state[client_id] = ema
         
-        # Apply flag penalty
-        flag_penalty = min(0.1 * flags, 0.5)  # Max 50% penalty
+        # Normalize EMA to [0, 1] range (assuming -0.2 to +0.2 range)
+        norm = (ema + 0.2) / 0.4
+        norm = np.clip(norm, 0.0, 1.0)
         
-        # Final reputation score
-        reputation_score = participation_score - flag_penalty
+        # Apply participation multiplier and flag penalty
+        score = norm * participation_rate - min(0.1 * flags, 0.5)
         
-        return max(0.0, min(1.0, reputation_score))
+        return float(np.clip(score, 0.0, 1.0))
     
     def _softplus(self, x: np.ndarray) -> np.ndarray:
         """
@@ -405,103 +353,154 @@ class TrustEvaluator:
         """
         # Use numerically stable implementation to avoid overflow
         return np.where(x > 20, x, np.log(1 + np.exp(np.clip(x, -500, 20))))
-    
-    def _update_dynamic_weights(self, client_id: str) -> None:
+        
+    def _calculate_weight_entropy(self, weights: Dict[str, float]) -> float:
         """
-        Update dynamic coefficients using ρ-adaptive method.
-        Implements the enhanced recommendation:
-        ρ = spearman([cos, ent, rep], ΔAcc) # three correlations
-        θ = softplus(θ_prev + η·ρ) # θ = [α,β,γ] with numerical stability
-        θ = θ / θ.sum() # simplex projection
+        Calculate entropy of weight distribution to measure uniformity.
+        
+        Args:
+            weights: Dictionary of weights
+            
+        Returns:
+            Entropy value (higher means more uniform)
+        """
+        if not weights:
+            return 0.0
+            
+        values = np.array(list(weights.values()))
+        # Avoid log(0) errors
+        values = np.clip(values, 1e-10, 1.0)
+        # Normalize to ensure they sum to 1
+        values = values / np.sum(values)
+        
+        # Calculate entropy: -Σ p_i * log(p_i)
+        entropy = -np.sum(values * np.log(values))
+        # Normalize by maximum possible entropy
+        max_entropy = np.log(len(values))
+        
+        return entropy / max_entropy if max_entropy > 0 else 0.0
+    
+    def collect_client_correlations(self, client_id: str) -> Dict[str, float]:
+        """
+        Collect correlation data for a single client without updating global weights.
+        
+        Args:
+            client_id: Client identifier
+            
+        Returns:
+            Dictionary with correlation coefficients or None if insufficient history
         """
         if not self.use_dynamic_weights:
-            return
+            return None
             
-        # Need sufficient history for correlation analysis
-        min_history = 5
-        if (len(self.cosine_history[client_id]) < min_history or
-            len(self.entropy_history[client_id]) < min_history or
-            len(self.reputation_history[client_id]) < min_history or
-            len(self.accuracy_delta_history[client_id]) < min_history):
-            return
+        # Require history
+        min_hist = 5
+        if (len(self.cosine_history[client_id]) < min_hist or
+            len(self.entropy_history[client_id]) < min_hist or
+            len(self.reputation_history[client_id]) < min_hist or
+            len(self.accuracy_delta_history[client_id]) < min_hist):
+            return None
         
         try:
-            # Get recent history for correlation analysis with adaptive window
-            max_window = 30
-            min_window = 10
-            available_history = len(self.cosine_history[client_id])
-            recent_window = min(max_window, max(min_window, available_history))
+            # Recent window
+            avail = len(self.cosine_history[client_id])
+            window = min(30, max(10, avail))
+            cos = self.cosine_history[client_id][-window:]
+            ent = self.entropy_history[client_id][-window:]
+            rep = self.reputation_history[client_id][-window:]
+            acc = self.accuracy_delta_history[client_id][-window:]
             
-            cos_scores = self.cosine_history[client_id][-recent_window:]
-            ent_scores = self.entropy_history[client_id][-recent_window:]
-            rep_scores = self.reputation_history[client_id][-recent_window:]
-            acc_deltas = self.accuracy_delta_history[client_id][-recent_window:]
+            # Ensure same length
+            m = min(len(cos), len(ent), len(rep), len(acc))
+            cos, ent, rep, acc = cos[-m:], ent[-m:], rep[-m:], acc[-m:]
             
-            # Ensure all arrays have the same length
-            min_len = min(len(cos_scores), len(ent_scores), len(rep_scores), len(acc_deltas))
-            cos_scores = cos_scores[-min_len:]
-            ent_scores = ent_scores[-min_len:]
-            rep_scores = rep_scores[-min_len:]
-            acc_deltas = acc_deltas[-min_len:]
+            # Calculate Spearman correlations
+            rho_cos = spearmanr(cos, acc).correlation or 0.0
+            rho_ent = spearmanr(ent, acc).correlation or 0.0
+            rho_rep = spearmanr(rep, acc).correlation or 0.0
             
-            # Calculate Spearman correlations with accuracy delta
-            rho_cos, p_cos = spearmanr(cos_scores, acc_deltas)
-            rho_ent, p_ent = spearmanr(ent_scores, acc_deltas)
-            rho_rep, p_rep = spearmanr(rep_scores, acc_deltas)
+            return {
+                'cosine': rho_cos,
+                'entropy': rho_ent,
+                'reputation': rho_rep
+            }
+                            
+        except Exception as e:
+            self.logger.warning(f"Correlation calculation failed for {client_id}: {e}")
+            return None
             
-            # Handle NaN correlations and apply significance weighting
-            def process_correlation(rho, p_val):
-                if np.isnan(rho) or np.isnan(p_val):
-                    return 0.0
-                # Weight by significance (lower p-value = higher weight)
-                significance_weight = max(0.1, 1.0 - p_val) if p_val <= 1.0 else 0.1
-                return rho * significance_weight
+    def update_dynamic_weights(self) -> None:
+        """
+        Update dynamic coefficients θ via Bayesian-Mirror Trust method.
+        This method should be called once per round after all client evaluations.
+        
+        Implements the full algorithm:
+        1. ρ = spearman([cos, ent, rep], ΔAcc) # three correlations  
+        2. s = (ρ + 1) / 2 # evidence conversion to [0,1]
+        3. θ̄ = (1 – λ)·θₜ₋₁ + λ·s # Bayesian smoothing
+        4. ηₜ = η₀ / √t # adaptive learning rate
+        5. g = exp(ηₜ · ρ) # mirror descent tilt factors
+        6. θₜ = normalise(θ̄ ∘ g) # element-wise product and simplex projection
+        """
+        if not self.use_dynamic_weights or not hasattr(self, '_client_correlations'):
+            return
             
-            rho_cos = process_correlation(rho_cos, p_cos if not np.isnan(p_cos) else 1.0)
-            rho_ent = process_correlation(rho_ent, p_ent if not np.isnan(p_ent) else 1.0)
-            rho_rep = process_correlation(rho_rep, p_rep if not np.isnan(p_rep) else 1.0)
+        if not self._client_correlations:
+            self.logger.warning("No client correlations collected this round")
+            return
             
-            # Create correlation vector ρ with bounds to prevent extreme updates
+        try:
+            # Step 1: Average correlations across all clients
+            cosine_corrs = [corr['cosine'] for corr in self._client_correlations.values()]
+            entropy_corrs = [corr['entropy'] for corr in self._client_correlations.values()]
+            reputation_corrs = [corr['reputation'] for corr in self._client_correlations.values()]
+            
+            rho_cos = np.mean(cosine_corrs)
+            rho_ent = np.mean(entropy_corrs)
+            rho_rep = np.mean(reputation_corrs)
             rho = np.array([rho_cos, rho_ent, rho_rep])
-            rho = np.clip(rho, -2.0, 2.0)  # Bound correlations for stability
             
-            # Adaptive learning rate based on correlation strength
-            correlation_strength = np.mean(np.abs(rho))
-            adaptive_lr = self.learning_rate * (1.0 + correlation_strength)
-            adaptive_lr = min(adaptive_lr, 0.1)  # Cap learning rate
+            # Step 2: Evidence conversion
+            s = (rho + 1) / 2
             
-            # Update weights: θ = softplus(θ_prev + η·ρ)
-            theta_update = self.theta + adaptive_lr * rho
+            # Step 3: Bayesian smoothing 
+            θ_bar = (1 - self.forgetting_factor) * self.theta + self.forgetting_factor * s
             
-            # Apply numerically stable softplus for positivity
-            theta_new = self._softplus(theta_update)
+            # Step 4: Adaptive learning rate - ensure round is properly set
+            η_t = self.eta0 / np.sqrt(max(1, self.current_round))
             
-            # Add small epsilon to prevent zero weights
-            epsilon = 1e-6
-            theta_new = theta_new + epsilon
+            # Step 5: Mirror descent tilt factors
+            g = np.exp(η_t * rho)
             
-            # Simplex projection (normalize to sum to 1)
-            theta_new = theta_new / theta_new.sum()
+            # Step 6: Element-wise product and simplex projection
+            θ_new = θ_bar * g
+            θ_new = np.maximum(θ_new, 1e-8)  # Prevent zero weights
+            θ_new /= θ_new.sum()  # Simplex projection
             
-            # Apply momentum for smoother updates
-            momentum = 0.1
-            self.theta = momentum * self.theta + (1 - momentum) * theta_new
+            # Update weights
+            self.theta = θ_new
             self.theta_history.append(self.theta.copy())
             
             # Update weights dictionary for backward compatibility
             self.weights = {
                 'cosine': self.theta[0],
-                'entropy': self.theta[1], 
+                'entropy': self.theta[1],
                 'reputation': self.theta[2]
             }
             
-            self.logger.debug(f"Updated dynamic weights for client {client_id}: "
-                            f"cos={self.theta[0]:.4f}, ent={self.theta[1]:.4f}, "
-                            f"rep={self.theta[2]:.4f}, correlations=[{rho_cos:.4f}, "
-                            f"{rho_ent:.4f}, {rho_rep:.4f}], adaptive_lr={adaptive_lr:.4f}")
+            # Debug logging
+            self.logger.debug(f"Global Bayesian-Mirror weight update:")
+            self.logger.debug(f"  - ρ = [{rho_cos:.4f}, {rho_ent:.4f}, {rho_rep:.4f}]")
+            self.logger.debug(f"  - s = [{s[0]:.4f}, {s[1]:.4f}, {s[2]:.4f}]")
+            self.logger.debug(f"  - θ̄ = [{θ_bar[0]:.4f}, {θ_bar[1]:.4f}, {θ_bar[2]:.4f}]")
+            self.logger.debug(f"  - ηₜ = {η_t:.4f}, g = [{g[0]:.4f}, {g[1]:.4f}, {g[2]:.4f}]")
+            self.logger.debug(f"  - θₜ = [{self.theta[0]:.4f}, {self.theta[1]:.4f}, {self.theta[2]:.4f}]")
+            
+            # Clear collected correlations for next round
+            self._client_correlations = {}
                             
         except Exception as e:
-            self.logger.warning(f"Failed to update dynamic weights for client {client_id}: {e}")
+            self.logger.warning(f"Dynamic weight update failed: {e}")
             # Graceful fallback to equal weights
             self.theta = np.array([1/3, 1/3, 1/3])
             self.weights = {'cosine': 1/3, 'entropy': 1/3, 'reputation': 1/3}
@@ -510,8 +509,7 @@ class TrustEvaluator:
                      performance_metrics: Dict[str, float], 
                      global_model: Dict[str, torch.Tensor],
                      round_number: int, global_update_avg: Optional[Dict[str, torch.Tensor]] = None,
-                     client_model: Optional[torch.nn.Module] = None,
-                     participation_rate: float = 1.0, flags: int = 0) -> float:
+                     client_model: Optional[torch.nn.Module] = None) -> float:
         """
         Calculate hybrid trust combining multiple trust metrics with dynamic weights.
         
@@ -535,27 +533,48 @@ class TrustEvaluator:
         reputation_trust = self._reputation_trust(client_id, performance_metrics, 
                                                 round_number, participation_rate, flags)
         
+        # Initialize history tracking if needed
+        if client_id not in self.cosine_history:
+            self.cosine_history[client_id] = []
+            self.entropy_history[client_id] = []
+            self.reputation_history[client_id] = []
+        
         # Store metrics for correlation analysis
         self.cosine_history[client_id].append(cosine_trust)
         self.entropy_history[client_id].append(entropy_trust)
         self.reputation_history[client_id].append(reputation_trust)
         
-        # Update dynamic weights based on correlations
-        self._update_dynamic_weights(client_id)
+        # Collect correlations for later global weight update
+        if not hasattr(self, '_client_correlations'):
+            self._client_correlations = {}
+            
+        correlations = self.collect_client_correlations(client_id)
+        if correlations:
+            self._client_correlations[client_id] = correlations
         
         # Calculate hybrid score using current weights
         hybrid_score = (self.weights['cosine'] * cosine_trust +
                        self.weights['entropy'] * entropy_trust +
                        self.weights['reputation'] * reputation_trust)
         
+        # Store hybrid score for thresholding
+        if client_id not in self.hybrid_scores:
+            self.hybrid_scores[client_id] = []
+        self.hybrid_scores[client_id].append(hybrid_score)
+        
+        # Track all scores for percentile thresholding
+        self.all_hybrid_scores.append(hybrid_score)
+        if len(self.all_hybrid_scores) > self.max_score_history:
+            self.all_hybrid_scores.pop(0)
+        
         # Log individual components for debugging
         self.logger.debug(f"Client {client_id} trust components - "
-                         f"Cosine: {cosine_trust:.3f}, "
-                         f"Entropy: {entropy_trust:.3f}, "
-                         f"Reputation: {reputation_trust:.3f}, "
-                         f"Weights: [{self.weights['cosine']:.3f}, "
-                         f"{self.weights['entropy']:.3f}, {self.weights['reputation']:.3f}], "
-                         f"Hybrid: {hybrid_score:.3f}")
+                        f"Cosine: {cosine_trust:.3f}, "
+                        f"Entropy: {entropy_trust:.3f}, "
+                        f"Reputation: {reputation_trust:.3f}, "
+                        f"Weights: [{self.weights['cosine']:.3f}, "
+                        f"{self.weights['entropy']:.3f}, {self.weights['reputation']:.3f}], "
+                        f"Hybrid: {hybrid_score:.3f}")
         
         return max(0.0, min(1.0, hybrid_score))
     
@@ -631,6 +650,48 @@ class TrustEvaluator:
         
         self.logger.info(f"Selected {len(selected)} trusted clients out of {len(available_clients)} available")
         return selected
+    
+    def get_trusted_clients_dynamic(
+        self, 
+        client_trust_scores: Dict[str, float], 
+        round_number: int = 0,
+        global_accuracy: Optional[float] = None
+    ) -> Tuple[List[str], float]:
+        """
+        Dynamic client selection using percentile-based threshold.
+        
+        Implements the algorithm specification:
+        1. Calculate dynamic threshold τₜ using percentile_p
+        2. Select clients with trust >= τₜ 
+        3. Ensure minimum number of trusted clients
+        
+        Args:
+            client_trust_scores: Dictionary mapping client IDs to trust scores
+            round_number: Current training round number
+            global_accuracy: Current global model accuracy (optional)
+            
+        Returns:
+            Tuple of (selected_clients, dynamic_threshold)
+        """
+        if not client_trust_scores:
+            return [], self.threshold
+            
+        # Calculate dynamic threshold using the comprehensive approach
+        dynamic_threshold = self.calculate_dynamic_threshold(client_trust_scores, round_number, global_accuracy)
+        
+        # Get clients above threshold
+        trusted_clients = [client_id for client_id, score in client_trust_scores.items() 
+                          if score >= dynamic_threshold]
+        
+        # Log selection information
+        self.logger.info(f"[Round {round_number}] Dynamic threshold {dynamic_threshold:.4f} "
+                        f"selected {len(trusted_clients)}/{len(client_trust_scores)} clients")
+        
+        if global_accuracy is not None:
+            self.logger.info(f"[Round {round_number}] Global accuracy: {global_accuracy:.4f}, "
+                           f"Temperature: {max(self.temp0 - self.temp_decay * round_number, self.temp_min):.4f}")
+        
+        return trusted_clients, dynamic_threshold
     
     def detect_malicious_clients(
         self,
@@ -845,19 +906,25 @@ class TrustEvaluator:
             self.logger.warning(f"All clients quarantined! Using best client: {best_client[0]} "
                               f"(trust: {best_client[1]:.3f})")
         
-        # Step 5: Apply traditional trust threshold filtering on survivors
+        # Step 5: Apply dynamic percentile threshold filtering on survivors
         surviving_trust_scores = {cid: enhanced_trust_scores[cid] for cid in surviving_clients}
+        
+        # Calculate dynamic percentile threshold (τₜ = percentile_p({Tₖ}))
+        dynamic_threshold = self.get_percentile_threshold(
+            surviving_trust_scores, round_number
+        )
+        
         trusted_survivors = [
             client_id for client_id, trust in surviving_trust_scores.items() 
-            if trust >= self.threshold
+            if trust >= dynamic_threshold
         ]
         
         if not trusted_survivors:
-            # Use top 50% of survivors if none meet threshold
+            # Use top performers if none meet dynamic threshold
             sorted_survivors = sorted(surviving_trust_scores.items(), key=lambda x: x[1], reverse=True)
-            num_keep = max(1, len(sorted_survivors) // 2)
+            num_keep = max(1, len(sorted_survivors) // 3)  # At least top 1/3
             trusted_survivors = [client_id for client_id, _ in sorted_survivors[:num_keep]]
-            self.logger.warning(f"No survivors meet trust threshold {self.threshold}. "
+            self.logger.warning(f"No survivors meet dynamic threshold {dynamic_threshold:.4f}. "
                               f"Using top {num_keep} survivors.")
         
         # Step 6: Get final trusted updates
@@ -867,21 +934,13 @@ class TrustEvaluator:
             if client_id in surviving_updates
         }
         
-        # Step 7: Re-weight by normalized trust scores
+        # Step 7: Calculate temperature-based softmax weights according to algorithm spec
         final_trust_scores = {cid: surviving_trust_scores[cid] for cid in final_trusted_updates}
-        sum_trust = sum(final_trust_scores.values())
         
-        if sum_trust > 0:
-            normalized_weights = {
-                client_id: score / sum_trust 
-                for client_id, score in final_trust_scores.items()
-            }
-        else:
-            # Equal weighting fallback
-            normalized_weights = {
-                client_id: 1.0 / len(final_trusted_updates) 
-                for client_id in final_trusted_updates
-            }
+        # Get temperature-based softmax weights
+        normalized_weights = self.get_aggregation_weights_temperature(
+            final_trust_scores, round_number
+        )
         
         # Step 8: Apply trust-weighted trimmed mean aggregation
         aggregated_model = self._apply_trimmed_mean_aggregation(
@@ -986,30 +1045,58 @@ class TrustEvaluator:
                 # Calculate number of values to trim from each end
                 k = max(1, int(trim_ratio * num_clients))
                 
-                # Flatten parameters for easier sorting
+                # Get original shape for reconstruction later
                 original_shape = stacked_params.shape[1:]
-                flattened_params = stacked_params.view(num_clients, -1)
                 
-                # Sort by parameter values and get median direction for trimming
-                param_means = torch.mean(flattened_params, dim=1)
-                sorted_indices = torch.argsort(param_means)
+                # Implement coordinate-wise trimmed mean (more robust than client-wise trimming)
+                # This processes each parameter element separately across all clients
+                aggregated_param = torch.zeros(original_shape, device=stacked_params.device, 
+                                              dtype=stacked_params.dtype)
                 
-                # Remove k smallest and k largest updates (by mean parameter value)
-                trimmed_indices = sorted_indices[k:-k] if k < num_clients // 2 else sorted_indices
+                # Use a more efficient coordinate-wise trimmed mean implementation
+                # Reshape params for easier coordinate-wise operations
+                flattened_shape = (num_clients, -1)
+                flattened_params = stacked_params.reshape(flattened_shape)
+                flat_size = flattened_params.shape[1]
                 
-                # Get trimmed parameters and weights
-                trimmed_params = stacked_params[trimmed_indices]
-                trimmed_weights = weight_tensor[trimmed_indices]
+                # Initialize flattened aggregated result
+                flattened_aggregated = torch.zeros(flat_size, device=stacked_params.device, 
+                                                 dtype=stacked_params.dtype)
+                                                 
+                # Process each parameter coordinate independently
+                for i in range(flat_size):
+                    # Extract values for this parameter element across all clients
+                    element_values = flattened_params[:, i]
+                    element_weights = weight_tensor.clone()
+                    
+                    # Sort values and corresponding weights
+                    sorted_values, sorted_indices = torch.sort(element_values)
+                    sorted_weights = element_weights[sorted_indices]
+                    
+                    # Trim extreme values (k from each end)
+                    if k < num_clients // 2:
+                        trimmed_values = sorted_values[k:-k]
+                        trimmed_weights = sorted_weights[k:-k]
+                    else:
+                        # Not enough clients for trimming, use median
+                        trimmed_values = sorted_values[num_clients//2].unsqueeze(0)
+                        trimmed_weights = torch.ones(1, device=trimmed_values.device)
+                    
+                    # Re-normalize weights after trimming
+                    weight_sum = trimmed_weights.sum()
+                    if weight_sum > 0:
+                        trimmed_weights = trimmed_weights / weight_sum
+                    else:
+                        # If all weights are zero (unlikely), use equal weights
+                        trimmed_weights = torch.ones_like(trimmed_weights) / len(trimmed_weights)
+                    
+                    # Calculate weighted average of trimmed values for this coordinate
+                    flattened_aggregated[i] = torch.sum(trimmed_values * trimmed_weights)
                 
-                # Re-normalize weights after trimming
-                trimmed_weights = trimmed_weights / trimmed_weights.sum()
+                # Reshape back to original parameter shape
+                aggregated_param = flattened_aggregated.reshape(original_shape)
                 
-                # Calculate trust-weighted mean of trimmed parameters
-                weight_expanded = trimmed_weights.view(-1, *([1] * len(original_shape)))
-                aggregated_param = torch.sum(trimmed_params * weight_expanded, dim=0)
-                
-                self.logger.debug(f"Parameter {param_name}: Trimmed {k} from each end, "
-                                f"used {len(trimmed_params)}/{num_clients} clients")
+                self.logger.debug(f"Parameter {param_name}: Used coordinate-wise trimmed mean with {k} trimmed from each end")
             else:
                 # Use weighted mean if not enough samples for trimming
                 weight_expanded = weight_tensor.view(-1, *([1] * len(stacked_params.shape[1:])))
@@ -1727,8 +1814,109 @@ class TrustEvaluator:
         
         return threshold
     
-    def get_trusted_clients_dynamic(self, trust_scores: Dict[str, float], round_number: int,
-                                   global_accuracy: Optional[float] = None) -> Tuple[Dict[str, float], float]:
+    def _calculate_percentile_threshold(self, scores: List[float], round_number: int) -> float:
+        """
+        Helper method for calculating percentile-based threshold.
+        Used by the comprehensive calculate_dynamic_threshold method.
+        
+        Args:
+            scores: List of trust scores
+            round_number: Current round number
+            
+        Returns:
+            Percentile-based threshold
+        """
+        # Calculate percentile threshold based on algorithm specification
+        percentile_threshold = np.percentile(scores, self.percentile_p)
+        
+        self.logger.debug(f"Percentile threshold (p={self.percentile_p}): {percentile_threshold:.4f}")
+        return percentile_threshold
+        
+    def _ensure_minimum_trusted_clients(self, scores: List[float], threshold: float) -> float:
+        """
+        Ensure minimum number of trusted clients by adjusting threshold if needed.
+        
+        Args:
+            scores: List of trust scores
+            threshold: Proposed threshold
+            
+        Returns:
+            Adjusted threshold that ensures minimum number of trusted clients
+        """
+        # Ensure minimum client count (at least min_clients must be trusted)
+        min_clients = max(2, int(len(scores) * 0.3))  # At least 30% of clients or 2, whichever is larger
+        
+        # Sort scores in descending order
+        sorted_scores = sorted(scores, reverse=True)
+        
+        # Check if threshold would exclude too many clients
+        if sum(score >= threshold for score in scores) < min_clients and len(sorted_scores) >= min_clients:
+            # Adjust threshold to include at least min_clients
+            adjusted_threshold = sorted_scores[min_clients - 1]
+            self.logger.info(f"Adjusted threshold from {threshold:.4f} to "
+                            f"{adjusted_threshold:.4f} to ensure {min_clients} trusted clients")
+            return adjusted_threshold
+            
+        return threshold
+    
+    def get_aggregation_weights_temperature(
+        self,
+        client_trust_scores: Dict[str, float],
+        round_number: int = 0
+    ) -> Dict[str, float]:
+        """
+        Calculate temperature-based softmax weights for client aggregation.
+        
+        Implements the algorithm specification:
+        wₖ = exp(Tₖ / tempₜ) / Σ exp(Tⱼ / tempₜ)
+        tempₜ = max(temp₀ – δ·t, temp_min)
+        
+        Args:
+            client_trust_scores: Dictionary mapping client IDs to their trust scores
+            round_number: Current training round number
+            
+        Returns:
+            Dictionary mapping client IDs to their softmax weights
+        """
+        if not client_trust_scores:
+            return {}
+            
+        # Update current round
+        self.current_round = round_number
+        
+        # Calculate annealing temperature schedule: tempₜ = max(temp₀ – δ·t, temp_min)
+        current_temp = max(self.temp0 - self.temp_decay * round_number, self.temp_min)
+        
+        # Apply softmax with temperature: wₖ = exp(Tₖ / tempₜ) / Σ exp(Tⱼ / tempₜ)
+        # Handle potential numerical overflow with normalization
+        max_score = max(client_trust_scores.values())
+        exp_values = {
+            client_id: np.exp((score - max_score) / current_temp)
+            for client_id, score in client_trust_scores.items()
+        }
+        
+        sum_exp = sum(exp_values.values())
+        
+        if sum_exp > 0:
+            softmax_weights = {
+                client_id: exp_val / sum_exp 
+                for client_id, exp_val in exp_values.items()
+            }
+        else:
+            # Equal weighting fallback (should never happen with normalized exp values)
+            softmax_weights = {
+                client_id: 1.0 / len(client_trust_scores) 
+                for client_id in client_trust_scores
+            }
+        
+        min_weight = min(softmax_weights.values())
+        max_weight = max(softmax_weights.values())
+            
+        self.logger.info(f"[Round {round_number}] Temperature softmax: T={current_temp:.4f}, "
+                        f"weights: [{min_weight:.6f}, {max_weight:.6f}], "
+                        f"entropy: {self._calculate_weight_entropy(softmax_weights):.4f}")
+                        
+        return softmax_weights
         """
         Get trusted clients using dynamic threshold calculation.
         
