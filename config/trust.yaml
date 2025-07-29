@@ -1,27 +1,23 @@
 # @package _global_
-# Enhanced trust configuration with SHAP alignment and adaptive LR
+# Dynamic Trust-Weighted Aggregation configuration
 
 trust:
-  name: hybrid
-  mode: hybrid
-  threshold: 0.5
+  threshold: 0.5  # Initial trust threshold (will be dynamically adjusted)
   
-  # Dynamic threshold configuration (NEW)
+  # Dynamic threshold configuration
   dynamic_threshold:
-    enabled: true                    # Enable dynamic threshold calculation
-    min_trust_threshold: 0.1         # Minimum allowed threshold
-    max_trust_threshold: 0.9         # Maximum allowed threshold
-    min_trusted_clients: 2           # Minimum number of clients to trust
-    target_trusted_ratio: 0.6        # Target ratio of trusted clients
-    threshold_percentile_weight: 0.4 # Weight for percentile-based threshold
-    threshold_statistical_weight: 0.3 # Weight for statistical threshold
-    threshold_adaptive_weight: 0.3   # Weight for adaptive threshold
+    enabled: true            # Enable dynamic threshold calculation
+    min_trust_threshold: 0.1 # Minimum allowed threshold
+    max_trust_threshold: 0.9 # Maximum allowed threshold
+    min_trusted_clients: 2   # Minimum number of clients to trust
+    percentile_p: 40         # Default percentile for threshold calculation
   
-  # SHAP-aligned trust parameters (Step 3-1)
-  gamma_shap: 0.25          # Weight for SHAP alignment in overall trust
-  shap_background: 256      # Background dataset size for SHAP explainer
-  shap_sample: 64           # Sample batch size for fingerprint computation
-  shap_history_window: 10   # Number of recent SHAP fingerprints to maintain
+  # Bayesian-Mirror dynamic weights
+  forgetting_factor: 0.2  # λ (EMA factor for evidence smoothing)
+  eta0: 0.10              # Mirror descent base learning rate
+  temp0: 1.0              # Initial temperature for softmax
+  temp_min: 0.3           # Minimum temperature
+  temp_decay: 0.1         # Temperature decay rate
   
   # Adaptive learning rate parameters (Step 4-1)
   lr:

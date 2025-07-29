@@ -9,6 +9,7 @@ This module provides a REST API server for exposing TRUST_MCNet functionality:
 - Trust metrics and analytics
 - Configuration management
 - Data export capabilities
+- Dynamic threshold management (enhanced server)
 
 Note: Requires FastAPI and uvicorn packages for full functionality.
 Install with: pip install fastapi uvicorn
@@ -16,6 +17,7 @@ Install with: pip install fastapi uvicorn
 
 try:
     from .server import TrustMCNetAPIServer
+    from .enhanced_server import EnhancedTrustMCNetAPIServer
     from .endpoints import setup_api_endpoints
     API_AVAILABLE = True
 except ImportError as e:

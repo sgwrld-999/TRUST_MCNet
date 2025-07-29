@@ -1,19 +1,17 @@
-# TRUST-MCNet: Federated Learning Framework with Trust Mechanisms
+# TRUST-MCNet: Dynamic Trust-Weighted Aggregation for Federated Learning
 
-A modern, production-ready federated learning framework for **IoT anomaly detection** with **advanced trust evaluation mechanisms**, built using enterprise-grade architecture patterns and best practices.
+A focused implementation of Dynamic Trust-Weighted Aggregation (DTWA) for **IoT anomaly detection** in federated learning environments.
 
 ## 🚀 Project Overview
 
-This completely redesigned TRUST-MCNet framework introduces:
+The TRUST-MCNet framework implements a novel approach to trusted federated learning:
 
-- **🏗️ Modern Architecture**: Strategy and Registry patterns with dependency injection
-- **⚙️ Advanced Configuration**: OmegaConf schemas with hierarchical config groups
-- **🔧 Enhanced Resource Management**: Ray context managers with guaranteed cleanup
-- **📊 Comprehensive Metrics**: TensorBoard/MLflow integration with federated logging
-- **🧪 Robust Testing**: Full test suite with unit, integration, and smoke tests
-- **💾 Memory Optimization**: Automatic GPU cache clearing and garbage collection
-- **🔄 Fault Tolerance**: Retry logic, error handling, and graceful degradation
-- **📈 Multi-Epoch Training**: Configurable local training with advanced client logic
+- **🔐 Hybrid Trust Scoring**: Combines cosine similarity, entropy, and reputation
+- **� Bayesian-Mirror Weights**: Self-adapting trust component weights
+- **🎯 Dynamic Threshold**: Percentile-based threshold adaptation
+- **🛡️ Robust Aggregation**: Temperature-controlled softmax with trimmed-mean
+- **� Non-IID Resilience**: Designed for heterogeneous IoT device data
+- **💻 Resource Efficiency**: Optimized for IoT device constraints
 
 ## 🏛️ Architecture Overview
 
@@ -24,6 +22,7 @@ The framework follows **SOLID principles** and uses modern patterns:
 - **Context Managers**: Guaranteed Ray resource cleanup and memory management
 - **Configuration as Code**: OmegaConf dataclass schemas with validation
 - **Dependency Injection**: Clean separation of concerns and testability
+- **Dynamic Trust**: Adaptive threshold calculation based on trust score distribution
 
 ### Core Technologies
 
@@ -146,6 +145,10 @@ Trust Summary: {'mean_trust': 0.673, 'quarantined_clients': ['client_2']}
 - **Validation**: All datasets undergo automatic preprocessing and validation
 
 ## 🚀 Usage Examples
+
+### API Server
+
+For advanced trust management, TRUST-MCNet provides an enhanced API server with dynamic threshold capabilities. See [API Server Documentation](API_SERVER.md) for detailed information.
 
 ### Basic Training
 

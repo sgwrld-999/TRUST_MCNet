@@ -322,7 +322,7 @@ class IoTDataProcessor:
         self.test_data = None
         
     def load_datasets(self) -> bool:
-        """Load all IoT datasets."""
+        """Load IoT datasets based on configuration."""
         dataset_files = {
             'CIC_IOMT_2024': 'data/IoT_Datasets/CIC_IOMT_2024_100_Samples.csv',
             'CIC_IoT_2023': 'data/IoT_Datasets/CIC_IoT_2023_100_Samples.csv',
@@ -332,16 +332,31 @@ class IoTDataProcessor:
         }
         
         combined_data = []
+        selected_dataset = self.config.get('dataset', 'all')
+        logger = logging.getLogger('TrustMCNet')
         
-        for name, file_path in dataset_files.items():
+        if selected_dataset != 'all' and selected_dataset in dataset_files:
+            # Load only the specified dataset
+            file_path = dataset_files[selected_dataset]
             try:
                 df = pd.read_csv(file_path)
-                df['dataset_source'] = name
+                df['dataset_source'] = selected_dataset
                 combined_data.append(df)
-                logging.getLogger('TrustMCNet').info(f"Loaded {name}: {df.shape}")
+                logger.info(f"Loaded selected dataset {selected_dataset}: {df.shape}")
             except Exception as e:
-                logging.getLogger('TrustMCNet').error(f"Failed to load {name}: {e}")
+                logger.error(f"Failed to load {selected_dataset}: {e}")
                 return False
+        else:
+            # Load all datasets
+            for name, file_path in dataset_files.items():
+                try:
+                    df = pd.read_csv(file_path)
+                    df['dataset_source'] = name
+                    combined_data.append(df)
+                    logger.info(f"Loaded {name}: {df.shape}")
+                except Exception as e:
+                    logger.error(f"Failed to load {name}: {e}")
+                    return False
         
         # Combine all datasets
         self.combined_df = pd.concat(combined_data, ignore_index=True)
@@ -521,17 +536,28 @@ class IoTTrustEvaluator:
         self.global_model = None  # Will be set by simulation manager
         try:
             # Import the enhanced trust evaluator from the restructured package
-            from trust_mcnet.trust_module.trust_evaluator import TrustEvaluator
+            from src.trust_mcnet.trust_module.trust_evaluator import TrustEvaluator
             
             # Configure trust evaluator with proper settings
             trust_config = config.get('trust_config', {})
-            trust_mode = trust_config.get('trust_mode', 'hybrid')
             trust_threshold = trust_config.get('threshold', 0.7)
             
+            # Enable dynamic threshold feature by default
+            if not trust_config:
+                trust_config = {
+                    'threshold': trust_threshold,
+                    'dynamic_threshold': {
+                        'enabled': True,
+                        'target_trusted_ratio': 0.6,
+                        'min_trusted_clients': 2
+                    }
+                }
+                config['trust_config'] = trust_config
+            
+            # Updated constructor to match new TrustEvaluator signature
             self.enhanced_trust = TrustEvaluator(
-                trust_mode=trust_mode,
                 threshold=trust_threshold,
-                use_dynamic_weights=True
+                config=config
             )
             self.use_enhanced = True
             print("✓ Enhanced trust module loaded successfully")
@@ -582,7 +608,8 @@ class IoTTrustEvaluator:
                     model_update=model_update,
                     performance_metrics=performance_metrics,
                     global_model=global_model_tensors,
-                    round_number=round_num
+                    round_number=round_num,
+                    global_update_avg=model_update  # Use model update as a fallback
                 )
                 return trust_score
                 
@@ -613,6 +640,8 @@ def parse_arguments():
                         help='Custom config file path')
     parser.add_argument('--trust-threshold', type=float, default=0.7,
                         help='Trust threshold for client filtering (default: 0.7)')
+    parser.add_argument('--dataset', type=str, default='all',
+                        help='Dataset to use: all, CIC_IOMT_2024, CIC_IoT_2023, Edge_IIoT, IoT_23, MedBIoT (default: all)')
     
     return parser.parse_args()
 
@@ -631,7 +660,8 @@ def main():
         'num_rounds': args.rounds,
         'verbose': args.verbose,
         'trust_threshold': args.trust_threshold,
-        'config_file': args.config
+        'config_file': args.config,
+        'dataset': args.dataset
     }
     
     try:
